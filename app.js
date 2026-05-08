@@ -430,7 +430,7 @@ function updateSummary() {
     let titleColor = "#E88D38";
     
     if (score >= 110) {
-        title = "共鬥天帝"; quote = "詞條跪發我，求求了"; titleColor = "#FF3333";
+        title = "共鬥天帝"; quote = "詞條掛發我，求求了"; titleColor = "#FF3333";
     } else if (score >= 95) {
         title = "個突皇帝"; quote = "我命令你馬上上號帶我前百"; titleColor = "#FF8800";
     } else if (score >= 80) {
