@@ -20,9 +20,14 @@
                         鑰匙: <input type="number" id="inputKeys" placeholder="數量">
                     </div>
                 </div>
-                <button onclick="openSummaryModal()" style="padding: 12px; background-color: #E88D38; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-                    查看詞條總和
-                </button>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button onclick="openSummaryModal()" style="padding: 12px; background-color: #E88D38; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                        查看詞條總和
+                    </button>
+                    <button onclick="resetEverything()" style="padding: 8px 12px; background-color: #C4B7A1; color: #5E5545; border: none; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">
+                        全部重置
+                    </button>
+                </div>
             </div>
             <div class="top-bar-stats">
                 <div id="displayStones">已耗石頭: <span class="red-text">0</span></div>

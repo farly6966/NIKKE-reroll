@@ -183,6 +183,26 @@ function renderUI() {
     updateSummary();
 }
 
+function resetEverything() {
+    if (!confirm("確定要重置所有裝備，並清空所有石頭與鑰匙數量嗎？")) return;
+    
+    document.getElementById('inputStones').value = '';
+    document.getElementById('inputKeys').value = '';
+    
+    totalStones = 0;
+    totalKeys = 0;
+    
+    equipmentData = [
+        { name: "頭", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
+        { name: "甲", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
+        { name: "手", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
+        { name: "鞋", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] }
+    ];
+    
+    updateTopBar();
+    renderUI();
+}
+
 function doReset(eqIdx) {
     equipmentData[eqIdx].awakened = false;
     equipmentData[eqIdx].stats = Array(3).fill().map(() => ({type: "空詞條", tier: 0}));
@@ -292,7 +312,7 @@ function doRerollEffect(eqIdx) {
     for(let i=0; i<3; i++) if(eq.stoneLocks[i] || eq.keyLocks[i]) lockedCount++;
     if (lockedCount > 2) return;
     
-    let stoneCost = 1 + eq.stoneLocks.filter(v=>v).length;
+    let stoneCost = 1 + lockedCount;
     if (!canAfford(stoneCost, 0)) return;
     
     addCost(stoneCost, 0);
@@ -331,8 +351,9 @@ function doRerollValue(eqIdx) {
     for(let i=0; i<3; i++) if(eq.stoneLocks[i] || eq.keyLocks[i]) lockedCount++;
     if (lockedCount > 2) return;
     
-    if (!canAfford(1, 0)) return;
-    addCost(1, 0);
+    let stoneCost = 1 + lockedCount;
+    if (!canAfford(stoneCost, 0)) return;
+    addCost(stoneCost, 0);
     
     let lockedSlots = [];
     for(let i=0; i<3; i++) lockedSlots[i] = eq.stoneLocks[i] || eq.keyLocks[i];
