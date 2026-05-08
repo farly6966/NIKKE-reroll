@@ -243,8 +243,12 @@ function toggleStone(eqIdx, slotIdx) {
             cb.checked = false;
         }
     } else {
-        eq.stoneLocks[slotIdx] = false;
-        renderUI();
+        if (confirm("是否確定要解除鎖定？")) {
+            eq.stoneLocks[slotIdx] = false;
+            renderUI();
+        } else {
+            cb.checked = true;
+        }
     }
 }
 
@@ -264,8 +268,12 @@ function toggleKey(eqIdx, slotIdx) {
             cb.checked = false;
         }
     } else {
-        eq.keyLocks[slotIdx] = false;
-        renderUI();
+        if (confirm("是否確定要解除鎖定？")) {
+            eq.keyLocks[slotIdx] = false;
+            renderUI();
+        } else {
+            cb.checked = true;
+        }
     }
 }
 
