@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NIKKE 洗詞條模擬器</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Sticky Top Bar -->
+        <div class="top-bar" id="topBar">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div class="input-group">
+                        石頭: <input type="number" id="inputStones" placeholder="數量">
+                    </div>
+                    <div class="input-group">
+                        鑰匙: <input type="number" id="inputKeys" placeholder="數量">
+                    </div>
+                </div>
+                <button onclick="openSummaryModal()" style="padding: 12px; background-color: #E88D38; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                    查看詞條總和
+                </button>
+            </div>
+            <div class="top-bar-stats">
+                <div id="displayStones">已耗石頭: <span class="red-text">0</span></div>
+                <div id="displayKeys">已耗鑰匙: <span class="red-text">0</span></div>
+            </div>
+        </div>
+
+        <!-- Simulator Tab -->
+        <div id="tab-sim" class="tab-content active" style="position: relative;">
+            <div id="lockOverlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(224, 217, 203, 0.85); z-index:50; display:flex; justify-content:center; align-items:flex-start; padding-top: 50px; text-align:center;">
+                <div style="font-size:16px; font-weight:bold; color:#5E5545; padding: 20px; background: #F7F4EB; border-radius: 12px; border: 2px solid #C4B7A1; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                    請先在上方輸入「石頭」與「鑰匙」持有數量
+                </div>
+            </div>
+            <div id="equipmentContainer"></div>
+        </div>
+
+        <!-- Summary Modal (Previously Tab) -->
+        <div class="modal-overlay" id="summaryModalOverlay">
+            <div class="modal-content" style="max-height: 80vh; overflow-y: auto;">
+                <h3 style="color:#5E5545;text-align:center;margin-top:0;">你的詞條總和</h3>
+                <div id="scoreContainer" style="text-align:center; margin-bottom: 20px; background: #E0D9CB; padding: 15px; border-radius: 8px;">
+                    <div id="scoreTitle" style="font-size: 26px; font-weight: bold; margin-bottom: 5px;"></div>
+                    <div id="scoreQuote" style="font-size: 14px; font-style: italic; color: #888;"></div>
+                </div>
+                <div id="summaryContent"></div>
+                <button onclick="closeSummaryModal()" style="width: 100%; padding: 12px; background-color: #5E5545; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; margin-top: 15px; cursor: pointer;">
+                    關閉面板
+                </button>
+            </div>
+        </div>
+
+        <!-- Reference Tab -->
+        <div id="tab-ref" class="tab-content">
+            <h3 style="color:#5E5545;text-align:center;">詞條範圍參考</h3>
+            <div id="referenceContent"></div>
+        </div>
+        
+        <!-- Calculator Tab -->
+        <div id="tab-calc" class="tab-content">
+            <h3 style="color:#5E5545;text-align:center;margin-bottom:15px;">期望計算器</h3>
+            
+            <div class="card">
+                <div class="card-title" style="font-size:16px; margin-bottom:10px;">初始狀態設定</div>
+                <div id="calcCurrentContainer"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title" style="font-size:16px; margin-bottom:10px;">目標設定 (滿足任意設定即可)</div>
+                <div id="calcTargetContainer"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title" style="font-size:16px; margin-bottom:10px;">洗法策略</div>
+                <div class="calc-row">
+                    <select id="calcStrategy" style="flex:1;">
+                        <option value="只要屬性與階級對就鎖">只要屬性與階級對就鎖</option>
+                        <option value="只要屬性對就鎖" selected>只要屬性對就鎖</option>
+                        <option value="不鎖任何詞條">不鎖任何詞條</option>
+                        <option value="只鎖第三個有效詞條">只鎖第三個有效詞條</option>
+                    </select>
+                </div>
+                <div class="calc-row" style="margin-top:10px;">
+                    <span style="font-size:14px; color:#5E5545; font-weight:bold; margin-right:10px;">模擬次數:</span>
+                    <select id="calcSimCount">
+                        <option value="1000">1000</option>
+                        <option value="5000">5000</option>
+                        <option value="10000" selected>10000</option>
+                        <option value="50000">50000</option>
+                    </select>
+                </div>
+                <div style="margin-top:15px;">
+                    <button class="btn-change" style="width:100%;" onclick="runSimulation()">開始計算</button>
+                </div>
+            </div>
+
+            <div id="calcResult" style="text-align:center; font-weight:bold; font-size:16px; color:#1CB0F6; margin-top:20px; margin-bottom:20px; min-height: 24px;">準備就緒。</div>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <div class="bottom-nav">
+            <button id="nav-tab-sim" class="nav-btn active" onclick="openTab('tab-sim')">模擬器</button>
+            <button id="nav-tab-ref" class="nav-btn" onclick="openTab('tab-ref')">圖鑑</button>
+            <button id="nav-tab-calc" class="nav-btn" onclick="openTab('tab-calc')">計算器</button>
+        </div>
+
+        <!-- Bottom Sheet Modal -->
+        <div class="modal-overlay" id="modalOverlay">
+            <div class="modal-content">
+                <div class="modal-title" id="modalTitle">效果確認</div>
+                <div class="modal-grid">
+                    <div class="modal-col">
+                        <h4>目前效果</h4>
+                        <div id="modalOldStats"></div>
+                    </div>
+                    <div class="modal-col">
+                        <h4>變更效果</h4>
+                        <div id="modalNewStats"></div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-keep" onclick="resolveModal(false)">效果維持</button>
+                    <button class="btn-change" onclick="resolveModal(true)">效果變更</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
