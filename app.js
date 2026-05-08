@@ -488,10 +488,12 @@ function buildCalculatorUI() {
         
         currHtml += `
         <div class="calc-row">
-            <span style="font-size:14px; font-weight:bold; margin-right:8px;">槽位${i+1}</span>
-            <select id="calc_cur_type_${i}" style="width:100px;">${typeOpts}</select>
-            <select id="calc_cur_tier_${i}" style="margin-left:5px;">${tierOpts}</select> <span style="font-size:12px; margin-left:3px;">階</span>
-            <input type="checkbox" id="calc_cur_lock_${i}"> <label for="calc_cur_lock_${i}" style="font-size:14px; margin-left:2px;">鎖</label>
+            <span style="font-size:14px; font-weight:bold; margin-right:8px; white-space:nowrap;">槽位${i+1}</span>
+            <select id="calc_cur_type_${i}" style="flex:1; min-width:0;">${typeOpts}</select>
+            <select id="calc_cur_tier_${i}" style="margin-left:5px;">${tierOpts}</select> <span style="font-size:12px; margin-left:3px; white-space:nowrap;">階</span>
+            <label style="font-size:14px; margin-left:8px; white-space:nowrap; display:flex; align-items:center;">
+                <input type="checkbox" id="calc_cur_lock_${i}" style="margin-right:2px; transform:scale(1.2);"> 鎖
+            </label>
         </div>`;
     }
     document.getElementById('calcCurrentContainer').innerHTML = currHtml;
@@ -512,107 +514,232 @@ function buildCalculatorUI() {
     document.getElementById('calcTargetContainer').innerHTML = tgtHtml;
 }
 
-function isValidTarget(statType, statTier, targets, strictTier) {
+function isValidType(statType, targets) {
     if (statType === "空詞條") return false;
-    for (let tgt of targets) {
-        if (tgt.type === statType && (!strictTier || statTier >= tgt.tier)) {
-            return true;
-        }
-    }
-    return false;
+    return targets.some(tgt => tgt.type === statType);
 }
 
-function checkGraduated(state, targets, strictTier) {
+function isValidTypeTier(statType, statTier, targets) {
+    if (statType === "空詞條") return false;
+    return targets.some(tgt => tgt.type === statType && statTier >= tgt.tier);
+}
+
+function checkTypesReady(state, targets) {
     if (targets.length === 0) return true;
-    let validCount = 0;
+    let count = 0;
     for (let s of state) {
-        if (isValidTarget(s.type, s.tier, targets, strictTier)) validCount++;
+        if (isValidType(s.type, targets)) count++;
     }
-    return validCount >= targets.length;
+    return count >= targets.length;
 }
 
-function runSimulation() {
-    let resultLbl = document.getElementById('calcResult');
-    resultLbl.innerText = "計算中...";
-    resultLbl.style.color = "#5E5545";
-    
-    let targets = [];
-    for(let i=0; i<6; i++) {
-        let type = document.getElementById(`calc_tgt_type_${i}`).value;
-        let tier = parseInt(document.getElementById(`calc_tgt_tier_${i}`).value);
-        if (type !== "空詞條") targets.push({type, tier});
+function checkFullGraduated(state, targets) {
+    if (targets.length === 0) return true;
+    let count = 0;
+    for (let s of state) {
+        if (isValidTypeTier(s.type, s.tier, targets)) count++;
     }
-    if (targets.length === 0) {
-        resultLbl.innerText = "請至少設定一個目標詞條！";
-        resultLbl.style.color = "#FF3333";
-        return;
-    }
+    return count >= targets.length;
+}
 
-    let initialState = [];
-    for(let i=0; i<3; i++) {
-        let type = document.getElementById(`calc_cur_type_${i}`).value;
-        let tier = parseInt(document.getElementById(`calc_cur_tier_${i}`).value);
-        let locked = document.getElementById(`calc_cur_lock_${i}`).checked;
-        initialState.push({type: type, tier: type === "空詞條" ? 0 : tier, locked: locked});
-    }
-
-    let strategy = document.getElementById('calcStrategy').value;
-    let strictTier = strategy.includes("與階級");
-    let simCount = parseInt(document.getElementById('calcSimCount').value);
-    
-    setTimeout(() => {
-        let totalStones = 0;
-        let successCount = 0;
-        
-        for (let iter = 0; iter < simCount; iter++) {
-            let state = initialState.map(s => ({...s}));
-            let stonesUsed = 0;
-            
-            while (!checkGraduated(state, targets, strictTier) && stonesUsed < 10000) {
-                if (strategy.includes("只要")) {
-                    for (let i=0; i<3; i++) {
-                        if (!state[i].locked && isValidTarget(state[i].type, state[i].tier, targets, strictTier)) {
-                            state[i].locked = true;
-                        }
+// Phase 1: Lock by TYPE match (ignore tier)
+function applyPhase1Strategy(strategyId, state, targets) {
+    switch(strategyId) {
+        case 0: // 只要有有效詞條就鎖
+            for (let i=0; i<3; i++) {
+                if (!state[i].locked && isValidType(state[i].type, targets)) {
+                    state[i].locked = true;
+                }
+            }
+            break;
+        case 1: // 先鎖三號詞條再鎖二號
+            if (!state[2].locked && isValidType(state[2].type, targets)) {
+                state[2].locked = true;
+            } else if (state[2].locked && !state[1].locked && isValidType(state[1].type, targets)) {
+                state[1].locked = true;
+            }
+            break;
+        case 2: // 二三號詞條只要有效就鎖
+            for (let i=1; i<3; i++) {
+                if (!state[i].locked && isValidType(state[i].type, targets)) {
+                    state[i].locked = true;
+                }
+            }
+            break;
+        case 3: // 一二號位有效且高於目標數值時鎖，否則先鎖3再鎖2
+            {
+                let didLock = false;
+                for (let i=0; i<2; i++) {
+                    if (!state[i].locked && isValidTypeTier(state[i].type, state[i].tier, targets)) {
+                        state[i].locked = true;
+                        didLock = true;
                     }
-                } else if (strategy.includes("只鎖第三個")) {
-                    if (!state[2].locked && isValidTarget(state[2].type, state[2].tier, targets, strictTier)) {
+                }
+                if (!didLock) {
+                    if (!state[2].locked && isValidType(state[2].type, targets)) {
                         state[2].locked = true;
+                    } else if (state[2].locked && !state[1].locked && isValidType(state[1].type, targets)) {
+                        state[1].locked = true;
+                    }
+                }
+            }
+            break;
+        case 4: // 二號位有效且高於目標數值時鎖，否則先鎖3再鎖2
+            {
+                let didLock = false;
+                if (!state[1].locked && isValidTypeTier(state[1].type, state[1].tier, targets)) {
+                    state[1].locked = true;
+                    didLock = true;
+                }
+                if (!didLock) {
+                    if (!state[2].locked && isValidType(state[2].type, targets)) {
+                        state[2].locked = true;
+                    } else if (state[2].locked && !state[1].locked && isValidType(state[1].type, targets)) {
+                        state[1].locked = true;
+                    }
+                }
+            }
+            break;
+    }
+}
+
+const STRATEGY_NAMES = [
+    "只要有有效詞條就鎖",
+    "先鎖三號詞條再鎖二號",
+    "二三號詞條只要有效就鎖",
+    "一二號位有效且高於目標數值時鎖，否則先鎖3再鎖2",
+    "二號位有效且高於目標數值時鎖，否則先鎖3再鎖2"
+];
+
+function runOneStrategy(strategyId, initialState, targets, simCount) {
+    let totalStones = 0;
+    let successCount = 0;
+    let needTierCheck = targets.some(t => t.tier > 1);
+
+    for (let iter = 0; iter < simCount; iter++) {
+        let state = initialState.map(s => ({...s}));
+        let stonesUsed = 0;
+
+        // === Phase 1: Effect Reroll - find correct TYPES ===
+        while (!checkTypesReady(state, targets) && stonesUsed < 10000) {
+            applyPhase1Strategy(strategyId, state, targets);
+
+            let lockedCount = state.filter(s => s.locked).length;
+            if (lockedCount > 2) break;
+
+            stonesUsed += 1 + lockedCount;
+            let usedTypes = state.filter(s => s.locked && s.type !== "空詞條").map(s => s.type);
+
+            for (let i = 0; i < 3; i++) {
+                if (!state[i].locked) {
+                    if (Math.random() < SLOT_PROBS[i]) {
+                        let newType = getRandomType(usedTypes);
+                        usedTypes.push(newType);
+                        state[i] = { type: newType, tier: rollTier(), locked: false };
+                    } else {
+                        state[i] = { type: '空詞條', tier: 0, locked: false };
+                    }
+                }
+            }
+        }
+
+        // === Phase 2: Value Reroll - reach target TIER ===
+        if (needTierCheck && checkTypesReady(state, targets) && !checkFullGraduated(state, targets)) {
+            // Unlock all slots for Phase 2
+            for (let i = 0; i < 3; i++) state[i].locked = false;
+
+            while (!checkFullGraduated(state, targets) && stonesUsed < 10000) {
+                // Lock slots that already meet tier target
+                for (let i = 0; i < 3; i++) {
+                    if (!state[i].locked && isValidTypeTier(state[i].type, state[i].tier, targets)) {
+                        state[i].locked = true;
                     }
                 }
 
                 let lockedCount = state.filter(s => s.locked).length;
                 if (lockedCount > 2) break;
+                if (checkFullGraduated(state, targets)) break;
 
                 stonesUsed += 1 + lockedCount;
-                let usedTypes = state.filter(s => s.locked && s.type !== "空詞條").map(s => s.type);
 
-                for (let i=0; i<3; i++) {
-                    if (!state[i].locked) {
-                        if (Math.random() < SLOT_PROBS[i]) {
-                            let newType = getRandomType(usedTypes);
-                            usedTypes.push(newType);
-                            state[i] = {type: newType, tier: rollTier(), locked: false};
-                        } else {
-                            state[i] = {type: '空詞條', tier: 0, locked: false};
-                        }
+                // Value reroll: only change TIER, keep TYPE
+                for (let i = 0; i < 3; i++) {
+                    if (!state[i].locked && isValidType(state[i].type, targets)) {
+                        state[i].tier = rollTier();
                     }
                 }
             }
-            
-            if (stonesUsed < 10000) {
-                totalStones += stonesUsed;
-                successCount++;
-            }
         }
-        
-        if (successCount === 0) {
-            resultLbl.innerText = "條件過於嚴苛，導致無法畢業！";
-            resultLbl.style.color = "#FF3333";
-        } else {
-            resultLbl.innerText = `模擬完成！預計平均需要【 ${(totalStones / successCount).toFixed(1)} 】顆石頭`;
-            resultLbl.style.color = "#1CB0F6";
+
+        if (stonesUsed < 10000 && checkFullGraduated(state, targets)) {
+            totalStones += stonesUsed;
+            successCount++;
         }
+    }
+
+    if (successCount === 0) return null;
+    return (totalStones / successCount).toFixed(1);
+}
+
+function runSimulation() {
+    let targets = [];
+    for (let i = 0; i < 6; i++) {
+        let type = document.getElementById(`calc_tgt_type_${i}`).value;
+        let tier = parseInt(document.getElementById(`calc_tgt_tier_${i}`).value);
+        if (type !== "空詞條") targets.push({ type, tier });
+    }
+
+    let resultCard = document.getElementById('calcResultCard');
+    let resultList = document.getElementById('calcResultList');
+
+    if (targets.length === 0) {
+        resultCard.style.display = 'block';
+        resultList.innerHTML = '<div style="text-align:center; color:#FF3333; font-weight:bold;">請至少設定一個目標詞條</div>';
+        return;
+    }
+
+    let initialState = [];
+    for (let i = 0; i < 3; i++) {
+        let type = document.getElementById(`calc_cur_type_${i}`).value;
+        let tier = parseInt(document.getElementById(`calc_cur_tier_${i}`).value);
+        let locked = document.getElementById(`calc_cur_lock_${i}`).checked;
+        initialState.push({ type: type, tier: type === "空詞條" ? 0 : tier, locked: locked });
+    }
+
+    let simCount = parseInt(document.getElementById('calcSimCount').value);
+
+    resultCard.style.display = 'block';
+    resultList.innerHTML = '<div style="text-align:center; color:#5E5545; font-weight:bold;">計算中...</div>';
+
+    setTimeout(() => {
+        let results = [];
+        for (let sid = 0; sid < 5; sid++) {
+            let avg = runOneStrategy(sid, initialState, targets, simCount);
+            results.push({ name: STRATEGY_NAMES[sid], avg: avg });
+        }
+
+        // Sort by avg stones (lowest first), nulls last
+        results.sort((a, b) => {
+            if (a.avg === null) return 1;
+            if (b.avg === null) return -1;
+            return parseFloat(a.avg) - parseFloat(b.avg);
+        });
+
+        let html = '';
+        results.forEach((r, idx) => {
+            let bgColor = idx === 0 ? '#d4edda' : '#F7F4EB';
+            let textColor = idx === 0 ? '#155724' : '#5E5545';
+            let badge = idx === 0 ? ' (最省)' : '';
+            let avgText = r.avg !== null ? `${r.avg} 顆石頭` : '無法畢業';
+            let avgColor = r.avg !== null ? '#1CB0F6' : '#FF3333';
+
+            html += `<div style="background:${bgColor}; padding:10px; margin-bottom:8px; border-radius:6px;">
+                <div style="font-size:13px; color:${textColor}; font-weight:bold; margin-bottom:4px;">${idx + 1}. ${r.name}${badge}</div>
+                <div style="font-size:16px; color:${avgColor}; font-weight:bold;">${avgText}</div>
+            </div>`;
+        });
+
+        resultList.innerHTML = html;
     }, 50);
 }
 
@@ -622,3 +749,4 @@ window.onload = () => {
     renderUI();
     updateTopBar();
 };
+
