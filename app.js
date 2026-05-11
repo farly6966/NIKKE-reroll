@@ -619,6 +619,7 @@ function runOneStrategy(strategyId, initialState, targets, simCount) {
     for (let iter = 0; iter < simCount; iter++) {
         let state = initialState.map(s => ({...s}));
         let stonesUsed = 0;
+        let currentLocks = 0;
 
         // === Phase 1: Effect Reroll - find correct TYPES ===
         while (!checkTypesReady(state, targets) && stonesUsed < 10000) {
@@ -626,6 +627,13 @@ function runOneStrategy(strategyId, initialState, targets, simCount) {
 
             let lockedCount = state.filter(s => s.locked).length;
             if (lockedCount > 2) break;
+
+            if (lockedCount > currentLocks) {
+                for (let i = currentLocks + 1; i <= lockedCount; i++) {
+                    stonesUsed += (i + 1);
+                }
+                currentLocks = lockedCount;
+            }
 
             stonesUsed += 1 + lockedCount;
             let usedTypes = state.filter(s => s.locked && s.type !== "空詞條").map(s => s.type);
