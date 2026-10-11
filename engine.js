@@ -124,67 +124,113 @@
     ];
     const KEEP_POLICIES = ["一律換成新結果", "沒用的結果留機率高的"];
 
-    // targets: 長度 9 的陣列，0 = 不要，1~15 = 最低階級
+    // 整套目標：
+    //   req    每件都要的種類（bitmask）
+    //   quota  長度 9，另外要湊的條數（分散在各件，每件同種類最多一條）
+    //   minTier 長度 9，各種類的最低階級
+    //   pieces 幾件裝備；init 只套用在第一件，其餘從空白開始
+    // 一件一件洗：還缺的種類都可以當這件的「額外詞條」，洗到哪種就扣哪種的額度。
     function simulate(cfg) {
-        const { strategy, keepHigh, init, targets, need, runs, exclude } = cfg;
+        const { strategy, keepHigh, init, req, quota, minTier, pieces, runs, exclude } = cfg;
         const LIMIT = 10000;
-        const okType = l => l.t !== EMPTY && targets[l.t] > 0;
-        const okTier = l => l.t !== EMPTY && targets[l.t] > 0 && l.k >= targets[l.t];
-        const count = (ls, f) => (f(ls[0]) ? 1 : 0) + (f(ls[1]) ? 1 : 0) + (f(ls[2]) ? 1 : 0);
         const nLocked = lk => (lk[0] ? 1 : 0) + (lk[1] ? 1 : 0) + (lk[2] ? 1 : 0);
+        const bits = m => { let c = 0; for (let i = 0; i < 9; i++) c += m >> i & 1; return c; };
+        const met = l => l.k >= minTier[l.t];
 
-        // 回傳這個策略想新鎖的槽位
-        function wants(ls, lk) {
-            const w = [];
-            const t = i => !lk[i] && okType(ls[i]);
-            const tt = i => !lk[i] && okTier(ls[i]);
-            const three2 = () => { if (t(2)) w.push(2); else if (lk[2] && t(1)) w.push(1); };
-            switch (strategy) {
-                case 0: for (let i = 0; i < 3; i++) if (t(i)) w.push(i); break;
-                case 1: three2(); break;
-                case 2: for (let i = 1; i < 3; i++) if (t(i)) w.push(i); break;
-                case 3: for (let i = 0; i < 2; i++) if (tt(i)) w.push(i); if (!w.length) three2(); break;
-                case 4: if (tt(1)) w.push(1); else three2(); break;
+        function onePiece(start, reqMask, optMask, optNeed) {
+            const needTotal = bits(reqMask) + optNeed;
+            // 哪幾條算有用：必要種類全算；額外種類只算 optNeed 條（已鎖的、達標的、後面槽位的優先）
+            function useful(ls, lk) {
+                const u = [false, false, false];
+                let cand = [];
+                for (let i = 0; i < 3; i++) {
+                    const t = ls[i].t;
+                    if (t === EMPTY) continue;
+                    if (reqMask >> t & 1) u[i] = true;
+                    else if (optNeed && (optMask >> t & 1)) cand.push(i);
+                }
+                if (cand.length > optNeed) {
+                    const score = i => (lk[i] ? 100 : 0) + (met(ls[i]) ? 10 : 0) + i;
+                    cand.sort((x, y) => score(y) - score(x));
+                    cand = cand.slice(0, optNeed);
+                }
+                for (const i of cand) u[i] = true;
+                return u;
             }
-            return w;
-        }
+            const cnt = u => (u[0] ? 1 : 0) + (u[1] ? 1 : 0) + (u[2] ? 1 : 0);
+            const cntMet = (ls, u) => (u[0] && met(ls[0]) ? 1 : 0) + (u[1] && met(ls[1]) ? 1 : 0) + (u[2] && met(ls[2]) ? 1 : 0);
 
-        const costs = [];
-        let fails = 0;
-        for (let it = 0; it < runs; it++) {
-            let ls = init.map(l => ({ t: l.t, k: l.k }));
-            const lk = init.map(l => !!l.locked && l.t !== EMPTY);
+            function wants(ls, lk, u) {
+                const w = [];
+                const t = i => !lk[i] && u[i];
+                const tt = i => !lk[i] && u[i] && met(ls[i]);
+                const three2 = () => { if (t(2)) w.push(2); else if (lk[2] && t(1)) w.push(1); };
+                switch (strategy) {
+                    case 0: for (let i = 0; i < 3; i++) if (t(i)) w.push(i); break;
+                    case 1: three2(); break;
+                    case 2: for (let i = 1; i < 3; i++) if (t(i)) w.push(i); break;
+                    case 3: for (let i = 0; i < 2; i++) if (tt(i)) w.push(i); if (!w.length) three2(); break;
+                    case 4: if (tt(1)) w.push(1); else three2(); break;
+                }
+                return w;
+            }
+
+            let ls = start.map(l => ({ t: l.t, k: l.k }));
+            const lk = start.map(l => !!l.locked && l.t !== EMPTY);
             let used = 0;
             const lock = i => { used += nLocked(lk) === 0 ? 2 : 3; lk[i] = true; };
+            let u = useful(ls, lk);
 
             // 第一階段：效果變更，湊齊種類
-            while (count(ls, okType) < need && used < LIMIT) {
-                for (const i of wants(ls, lk)) if (nLocked(lk) < 2) lock(i);
+            while (cnt(u) < needTotal && used < LIMIT) {
+                for (const i of wants(ls, lk, u)) if (nLocked(lk) < 2) lock(i);
                 used += 1 + nLocked(lk);
                 const nw = rollEffect(ls, lk, exclude);
+                const nu = useful(nw, lk);
                 let take = true;
-                if (keepHigh && count(nw, okType) < need && wants(nw, lk).length === 0) {
+                if (keepHigh && cnt(nu) < needTotal && wants(nw, lk, nu).length === 0) {
                     take = massEffect(nw, lk) >= massEffect(ls, lk);
                 }
-                if (take) ls = nw;
+                if (take) { ls = nw; u = nu; }
             }
 
             // 第二階段：數值變更，把階級洗到目標
-            if (count(ls, okType) >= need) {
-                for (let i = 0; i < 3; i++) if (lk[i] && !okTier(ls[i])) lk[i] = false;
-                while (count(ls, okTier) < need && used < LIMIT) {
-                    for (let i = 0; i < 3; i++) if (!lk[i] && okTier(ls[i]) && nLocked(lk) < 2) lock(i);
+            if (cnt(u) >= needTotal) {
+                for (let i = 0; i < 3; i++) if (lk[i] && !(u[i] && met(ls[i]))) lk[i] = false;
+                while (cntMet(ls, u) < needTotal && used < LIMIT) {
+                    for (let i = 0; i < 3; i++) if (!lk[i] && u[i] && met(ls[i]) && nLocked(lk) < 2) lock(i);
                     used += 1 + nLocked(lk);
                     const nw = rollValue(ls, lk, exclude);
                     let take = true;
-                    if (keepHigh && count(nw, okTier) <= count(ls, okTier)) {
-                        take = massValue(nw, lk) >= massValue(ls, lk);
-                    }
+                    if (keepHigh && cntMet(nw, u) <= cntMet(ls, u)) take = massValue(nw, lk) >= massValue(ls, lk);
                     if (take) ls = nw;
                 }
             }
+            const ok = cnt(u) >= needTotal && cntMet(ls, u) >= needTotal && used < LIMIT;
+            return { used, ok, ls };
+        }
 
-            if (count(ls, okTier) >= need && used < LIMIT) costs.push(used); else fails++;
+        const blank = [0, 1, 2].map(() => ({ t: EMPTY, k: 0 }));
+        const costs = [];
+        let fails = 0;
+        for (let it = 0; it < runs; it++) {
+            const left = quota.slice();
+            let total = 0, ok = true;
+            for (let p = pieces; p >= 1 && ok; p--) {
+                // 剩 p 件：額度等於件數的種類這件一定要有，其餘進額外池
+                let reqMask = req, optMask = 0, pool = 0;
+                for (let t = 0; t < 9; t++) {
+                    if (left[t] <= 0 || (req >> t & 1)) continue;
+                    if (left[t] >= p) reqMask |= 1 << t; else { optMask |= 1 << t; pool += left[t]; }
+                }
+                const cap = Math.max(0, 3 - bits(reqMask));
+                const optNeed = Math.min(cap, Math.max(0, pool - (p - 1) * cap));
+                const r = onePiece(p === pieces && init ? init : blank, reqMask, optMask, optNeed);
+                total += r.used;
+                ok = r.ok;
+                for (const l of r.ls) if (l.t !== EMPTY && left[l.t] > 0 && !(req >> l.t & 1) && met(l)) left[l.t]--;
+            }
+            if (ok) costs.push(total); else fails++;
         }
 
         if (!costs.length) return { avg: null, median: null, p90: null, fails };
