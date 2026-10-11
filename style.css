@@ -221,3 +221,4 @@ tfoot td, tfoot th { color: var(--mute); border-bottom: 0; }
     dialog { padding: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.presets .btn { flex: 1; padding: 6px 10px; font-size: 14px; }

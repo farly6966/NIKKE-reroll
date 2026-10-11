@@ -142,11 +142,13 @@ function doRoll(g, mode) {
         const o = g.lines[i];
         return lineHTML(l, locked[i] ? "is-locked" : (o.t !== l.t || o.k !== l.k) ? "changed" : "");
     }).join("");
-    $("massOld").textContent = `出現機率 ${pct(mo)}`;
-    $("massNew").textContent = `出現機率 ${pct(mn)}`;
-    $("rollTip").textContent = mo === mn ? "兩邊機率一樣，留哪邊下次洗的機率都相同。"
-        : mo > mn ? "如果兩邊都不要：選「效果維持」，下次排除掉的機率比較多。"
-            : "如果兩邊都不要：選「效果變更」，下次排除掉的機率比較多。";
+    const boost = m => m <= 0 ? "留這組：下次機率不變" : `留這組：下次其他結果機率 +${(m / (1 - m) * 100).toFixed(m > 0.01 ? 1 : 2)}%`;
+    $("massOld").textContent = boost(mo);
+    $("massNew").textContent = boost(mn);
+    $("rollTip").textContent = Math.max(mo, mn) < 0.01
+        ? "遊戲不會再洗出你留著的那組，它原本的機率會分給其他結果。這次兩邊都不到 1%，留哪邊幾乎沒差。"
+        : mo === mn ? "遊戲不會再洗出你留著的那組，它原本的機率會分給其他結果。兩邊加成一樣。"
+            : `遊戲不會再洗出你留著的那組，它原本的機率會分給其他結果。兩邊都不要的話，選「${mo > mn ? "效果維持" : "效果變更"}」加成比較多。`;
     pending = { g, next };
     renderLedger();
     $("rollDialog").showModal();
@@ -249,8 +251,13 @@ function buildCalc() {
         <label class="check"><input type="checkbox" id="tOn${i}"> ${t}</label>
         <select id="tTier${i}" aria-label="${t} 最低階級">${tierOpts(11)}</select><span>階以上</span>
     </div>`).join("");
-    $("calcNeed").value = "2";
+    setPreset([0, 3]);
 }
+function setPreset(ids) {
+    TYPES.forEach((_, i) => { $("tOn" + i).checked = ids.includes(i); });
+    $("calcNeed").value = String(ids.length);
+}
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => setPreset(b.dataset.preset.split(",").map(Number)));
 
 function runCalc() {
     const out = $("calcResult");

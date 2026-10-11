@@ -52,7 +52,11 @@
                     <div id="calcCurrent"></div>
 
                     <h2>想要的詞條</h2>
-                    <p class="hint">點選種類後設定最低階級。</p>
+                    <div class="row presets">
+                        <button class="btn ghost" data-preset="0">只要優越</button>
+                        <button class="btn ghost" data-preset="0,3">優越 + 攻擊</button>
+                    </div>
+                    <p class="hint">或自己勾選種類，再設定最低階級。</p>
                     <div id="calcTargets" class="targets"></div>
                     <div class="row">
                         <label for="calcNeed">至少要湊到</label>
@@ -100,7 +104,7 @@
                     <li>目前 6～10 階：4 ÷ 93 = 4.30%</li>
                     <li>目前 11 階：4 ÷ 99 = 4.04%</li>
                 </ul>
-                <p>所以洗出沒用的結果時，選「效果維持」或「效果變更」要看哪一邊的出現機率高。模擬的確認視窗會標出兩邊的機率。</p>
+                <p>這個差別只在「數值變更」明顯：留 1～5 階的詞條，下次其他階級的機率各多 13.6%；留 11 階以上只多 1%。「效果變更」時任何一組結果原本的機率都不到 1%，留哪邊幾乎沒差。模擬的確認視窗會標出兩邊各自的加成。</p>
                 <h2>基本機率與花費</h2>
                 <ul>
                     <li>槽位出現率：1 號 100%、2 號 50%、3 號 30%。同一件裝備不會有重複種類。</li>
