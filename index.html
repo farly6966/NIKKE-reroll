@@ -47,34 +47,36 @@
         <section id="tab-calc" class="tab">
             <div class="calc">
                 <div class="calc-form">
-                    <h2>現在的詞條</h2>
-                    <div id="calcCurrent"></div>
+                    <h2>要洗幾件</h2>
+                    <div class="row">
+                        <select id="calcPieces"><option value="1">1 件</option><option value="2">2 件</option><option value="3">3 件</option><option value="4" selected>4 件（整套）</option></select>
+                    </div>
+                    <div id="calcCurrentWrap" hidden>
+                        <h2>這件現在的詞條</h2>
+                        <div id="calcCurrent"></div>
+                    </div>
 
                     <h2>想要的詞條</h2>
                     <div class="row presets">
                         <button class="btn ghost" data-preset="0">只要優越</button>
                         <button class="btn ghost" data-preset="0,3">優越 + 攻擊</button>
                     </div>
-                    <p class="hint">或自己勾選種類，再設定最低階級。</p>
-                    <div id="calcTargets" class="targets"></div>
-                    <div class="row">
-                        <label for="calcNeed">至少要湊到</label>
-                        <select id="calcNeed"><option>1</option><option>2</option><option>3</option></select>
-                        <span>條</span>
-                    </div>
+                    <p class="hint">「每件都要」是每件裝備各一條。「另外」是整套合計幾條，分在哪幾件都可以，例如爆傷 2、爆率 1、彈藥 1。</p>
+                    <div class="tgrid" id="calcTargets"></div>
+                    <p class="hint" id="calcCount"></p>
                     <div class="row">
                         <label for="calcRuns">模擬次數</label>
                         <select id="calcRuns">
-                            <option value="2000">2,000</option>
-                            <option value="10000" selected>10,000</option>
-                            <option value="30000">30,000</option>
+                            <option value="1000">1,000</option>
+                            <option value="5000" selected>5,000</option>
+                            <option value="20000">20,000</option>
                         </select>
                     </div>
                     <button class="btn solid wide" id="btnCalc">開始計算</button>
                 </div>
                 <div class="calc-out">
-                    <h2>各策略要花的石頭</h2>
-                    <div id="calcResult"><p class="hint">設定目標後按「開始計算」。會比較 5 種鎖定方式 × 2 種保留方式。</p></div>
+                    <h2>各策略總共要花的石頭</h2>
+                    <div id="calcResult"><p class="hint">設定目標後按「開始計算」。會比較 5 種鎖定方式 × 2 種保留方式，數字是所有件數加起來的總花費。</p></div>
                 </div>
             </div>
         </section>

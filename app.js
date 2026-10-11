@@ -243,6 +243,7 @@ function buildRef() {
 
 // ---------- 期望計算 ----------
 const tierOpts = sel => { let s = ""; for (let k = 1; k <= 15; k++) s += `<option ${k === sel ? "selected" : ""}>${k}</option>`; return s; };
+const piecesNow = () => +$("calcPieces").value;
 function buildCalc() {
     const typeOpts = `<option value="-1">空詞條</option>` + TYPES.map((t, i) => `<option value="${i}">${t}</option>`).join("");
     $("calcCurrent").innerHTML = [0, 1, 2].map(i => `<div class="row">
@@ -251,45 +252,81 @@ function buildCalc() {
         <select id="cTier${i}" aria-label="${i + 1} 號位階級">${tierOpts(11)}</select><span>階</span>
         <label class="check"><input type="checkbox" id="cLock${i}"> 已鎖</label>
     </div>`).join("");
-    $("calcTargets").innerHTML = TYPES.map((t, i) => `<div class="target">
-        <label class="check"><input type="checkbox" id="tOn${i}"> ${t}</label>
-        <select id="tTier${i}" aria-label="${t} 最低階級">${tierOpts(11)}</select><span>階以上</span>
-    </div>`).join("");
+    $("calcTargets").innerHTML = `<span class="th">種類</span><span class="th">每件都要</span><span class="th">另外</span><span class="th">最低階級</span>` +
+        TYPES.map((t, i) => `<span class="tname">${t}</span>
+        <input type="checkbox" id="tReq${i}" aria-label="${t} 每件都要">
+        <select id="tQ${i}" aria-label="${t} 另外要幾條"></select>
+        <select id="tTier${i}" aria-label="${t} 最低階級">${tierOpts(1)}</select>`).join("");
+    $("calcTargets").addEventListener("change", syncCalc);
+    $("calcPieces").addEventListener("change", syncCalc);
     setPreset([0, 3]);
 }
 function setPreset(ids) {
-    TYPES.forEach((_, i) => { $("tOn" + i).checked = ids.includes(i); });
-    $("calcNeed").value = String(ids.length);
+    TYPES.forEach((_, i) => { $("tReq" + i).checked = ids.includes(i); $("tQ" + i).dataset.v = 0; });
+    syncCalc();
+}
+function readGoal() {
+    let req = 0;
+    const quota = [], minTier = [];
+    TYPES.forEach((_, i) => {
+        const r = $("tReq" + i).checked;
+        if (r) req |= 1 << i;
+        quota.push(r ? 0 : +$("tQ" + i).value || 0);
+        minTier.push(+$("tTier" + i).value);
+    });
+    return { req, quota, minTier };
+}
+function syncCalc(ev) {
+    const n = piecesNow();
+    if (ev && ev.target.id.startsWith("tQ")) ev.target.dataset.v = ev.target.value;
+    TYPES.forEach((_, i) => {
+        const q = $("tQ" + i), r = $("tReq" + i).checked;
+        const v = Math.min(n, +(q.dataset.v || 0));
+        let o = "";
+        for (let k = 0; k <= n; k++) o += `<option value="${k}" ${k === v ? "selected" : ""}>${k} 條</option>`;
+        q.innerHTML = o;
+        q.disabled = r;
+        $("tTier" + i).disabled = !r && v === 0;
+    });
+    $("calcCurrentWrap").hidden = n !== 1;
+    const g = readGoal();
+    const nReq = TYPES.filter((_, i) => g.req >> i & 1).length;
+    const total = nReq * n + g.quota.reduce((a, b) => a + b, 0);
+    $("calcCount").textContent = `目前目標共 ${total} 條，${n} 件裝備最多放 ${n * 3} 條。`;
+    $("calcCount").classList.toggle("error", total > n * 3);
+    return { ...g, total, pieces: n };
 }
 document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => setPreset(b.dataset.preset.split(",").map(Number)));
 
 function runCalc() {
     const out = $("calcResult");
-    const targets = TYPES.map((_, i) => $("tOn" + i).checked ? +$("tTier" + i).value : 0);
-    const nT = targets.filter(Boolean).length;
-    const need = +$("calcNeed").value;
-    const init = [0, 1, 2].map(i => {
-        const t = +$("cType" + i).value;
-        return { t, k: t === EMPTY ? 0 : +$("cTier" + i).value, locked: $("cLock" + i).checked };
-    });
-    const used = init.filter(l => l.t !== EMPTY).map(l => l.t);
-    if (!nT) { out.innerHTML = `<p class="error">請至少勾選一種想要的詞條。</p>`; return; }
-    if (need > nT) { out.innerHTML = `<p class="error">想要的種類只有 ${nT} 種，湊不到 ${need} 條。多勾幾種，或把條數調低。</p>`; return; }
-    if (new Set(used).size !== used.length) { out.innerHTML = `<p class="error">現在的詞條有重複種類，同一件裝備不會出現兩條一樣的。</p>`; return; }
+    const g = syncCalc();
+    let init = null;
+    if (g.pieces === 1) {
+        init = [0, 1, 2].map(i => {
+            const t = +$("cType" + i).value;
+            return { t, k: t === EMPTY ? 0 : +$("cTier" + i).value, locked: $("cLock" + i).checked };
+        });
+        const used = init.filter(l => l.t !== EMPTY).map(l => l.t);
+        if (new Set(used).size !== used.length) { out.innerHTML = `<p class="error">現在的詞條有重複種類，同一件裝備不會出現兩條一樣的。</p>`; return; }
+    }
+    if (!g.total) { out.innerHTML = `<p class="error">請至少選一種想要的詞條。</p>`; return; }
+    if (g.total > g.pieces * 3) { out.innerHTML = `<p class="error">目標共 ${g.total} 條，${g.pieces} 件裝備只放得下 ${g.pieces * 3} 條。減少條數或增加件數。</p>`; return; }
 
     const runs = +$("calcRuns").value;
+    const base = { init, req: g.req, quota: g.quota, minTier: g.minTier, pieces: g.pieces, runs };
     const jobs = [];
     for (let s = 0; s < 5; s++) for (let k = 0; k < 2; k++) jobs.push({ strategy: s, keepHigh: !!k });
     const results = [];
     $("btnCalc").disabled = true;
     const step = () => {
         const j = jobs[results.length];
-        results.push({ ...j, ...E.simulate({ ...j, init, targets, need, runs, exclude: true }) });
+        results.push({ ...j, ...E.simulate({ ...base, ...j, exclude: true }) });
         out.innerHTML = `<p class="hint">計算中 ${results.length} / ${jobs.length}</p>`;
         if (results.length < jobs.length) return setTimeout(step, 0);
         results.sort((a, b) => (a.avg === null) - (b.avg === null) || a.avg - b.avg);
         const best = results[0];
-        const old = best.avg === null ? null : E.simulate({ strategy: best.strategy, keepHigh: false, init, targets, need, runs, exclude: false });
+        const old = best.avg === null ? null : E.simulate({ ...base, strategy: best.strategy, keepHigh: false, exclude: false });
         showResults(results, old);
         $("btnCalc").disabled = false;
     };
@@ -299,7 +336,7 @@ function runCalc() {
 
 function showResults(results, old) {
     const max = Math.max(...results.map(r => r.avg || 0));
-    if (results[0].avg === null) { $("calcResult").innerHTML = `<p class="error">每種策略都在 10,000 顆內洗不到，目標可能太高。</p>`; return; }
+    if (results[0].avg === null) { $("calcResult").innerHTML = `<p class="error">每種策略都有裝備在 10,000 顆內洗不到，目標可能太高。</p>`; return; }
     let h = `<ol class="rank">`;
     results.forEach((r, i) => {
         h += `<li class="${i === 0 ? "best" : ""}">
