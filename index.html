@@ -1,136 +1,141 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NIKKE 洗詞條模擬器</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="app">
-        <!-- Sticky Top Bar -->
-        <div class="top-bar" id="topBar">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <div class="input-group">
-                        石頭: <input type="number" id="inputStones" placeholder="數量">
+    <header class="masthead">
+        <h1>洗詞條模擬器</h1>
+        <nav class="tabs" role="tablist">
+            <button role="tab" data-tab="sim" aria-selected="true">模擬</button>
+            <button role="tab" data-tab="calc" aria-selected="false">期望計算</button>
+            <button role="tab" data-tab="ref" aria-selected="false">階級表</button>
+            <button role="tab" data-tab="rule" aria-selected="false">機制</button>
+        </nav>
+    </header>
+
+    <main>
+        <!-- 模擬 -->
+        <section id="tab-sim" class="tab active">
+            <div class="ledger">
+                <div class="res">
+                    <span class="res-name"><i class="dot stone"></i>石頭</span>
+                    <b id="spentStones">0</b>
+                    <span id="leftStones" class="res-left"></span>
+                    <label>預算 <input type="number" id="inputStones" min="0" inputmode="numeric" placeholder="不限"></label>
+                </div>
+                <div class="res">
+                    <span class="res-name"><i class="dot key"></i>鑰匙</span>
+                    <b id="spentKeys">0</b>
+                    <span id="leftKeys" class="res-left"></span>
+                    <label>預算 <input type="number" id="inputKeys" min="0" inputmode="numeric" placeholder="不限"></label>
+                </div>
+                <div class="ledger-actions">
+                    <button class="btn solid" id="btnSummary">查看詞條總和</button>
+                    <button class="btn ghost" id="btnResetAll">全部重置</button>
+                </div>
+            </div>
+            <div id="gear" class="gear"></div>
+        </section>
+
+        <!-- 期望計算 -->
+        <section id="tab-calc" class="tab">
+            <div class="calc">
+                <div class="calc-form">
+                    <h2>現在的詞條</h2>
+                    <div id="calcCurrent"></div>
+
+                    <h2>想要的詞條</h2>
+                    <p class="hint">點選種類後設定最低階級。</p>
+                    <div id="calcTargets" class="targets"></div>
+                    <div class="row">
+                        <label for="calcNeed">至少要湊到</label>
+                        <select id="calcNeed"><option>1</option><option>2</option><option>3</option></select>
+                        <span>條</span>
                     </div>
-                    <div class="input-group">
-                        鑰匙: <input type="number" id="inputKeys" placeholder="數量">
+                    <div class="row">
+                        <label for="calcRuns">模擬次數</label>
+                        <select id="calcRuns">
+                            <option value="2000">2,000</option>
+                            <option value="10000" selected>10,000</option>
+                            <option value="30000">30,000</option>
+                        </select>
                     </div>
+                    <button class="btn solid wide" id="btnCalc">開始計算</button>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <button onclick="openSummaryModal()" style="padding: 12px; background-color: #E88D38; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-                        查看詞條總和
-                    </button>
-                    <button onclick="resetEverything()" style="padding: 8px 12px; background-color: #C4B7A1; color: #5E5545; border: none; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">
-                        全部重置
-                    </button>
+                <div class="calc-out">
+                    <h2>各策略要花的石頭</h2>
+                    <div id="calcResult"><p class="hint">設定目標後按「開始計算」。會比較 5 種鎖定方式 × 2 種保留方式。</p></div>
                 </div>
             </div>
-            <div class="top-bar-stats">
-                <div id="displayStones">已耗石頭: <span class="red-text">0</span></div>
-                <div id="displayKeys">已耗鑰匙: <span class="red-text">0</span></div>
+        </section>
+
+        <!-- 階級表 -->
+        <section id="tab-ref" class="tab">
+            <div class="table-wrap"><table id="refTable"></table></div>
+        </section>
+
+        <!-- 機制 -->
+        <section id="tab-rule" class="tab">
+            <div class="prose">
+                <h2>新機制：不會再洗出一模一樣的結果</h2>
+                <p>「效果變更」和「數值變更」洗出來的結果，如果跟目前的詞條<b>完全相同</b>，系統會重抽。只要有任何一條不同就算不同結果。</p>
+                <ul>
+                    <li>命中 1 階／攻擊 3 階／蓄力 5 階 → 不會再出現同樣這三條。</li>
+                    <li>命中 11 階／空／空 → 仍可能洗出命中 9 階／空／空（階級不同）。</li>
+                    <li>比較對象只有「目前的詞條」，之前出現過的結果不算。</li>
+                    <li>未鎖定的槽位全空時，洗完仍可能維持全空。</li>
+                </ul>
+                <h2>為什麼要留機率高的詞條</h2>
+                <p>被排除掉的機率會平均分給其他結果。目前的詞條越常見（低階、條數少），排掉的機率越大，洗到好結果的機會就越高。</p>
+                <p>以單條數值變更為例，洗到 12 階以上的機率：</p>
+                <ul>
+                    <li>目前 1～5 階：4 ÷ 88 = 4.55%</li>
+                    <li>目前 6～10 階：4 ÷ 93 = 4.30%</li>
+                    <li>目前 11 階：4 ÷ 99 = 4.04%</li>
+                </ul>
+                <p>所以洗出沒用的結果時，選「效果維持」或「效果變更」要看哪一邊的出現機率高。模擬的確認視窗會標出兩邊的機率。</p>
+                <h2>基本機率與花費</h2>
+                <ul>
+                    <li>槽位出現率：1 號 100%、2 號 50%、3 號 30%。同一件裝備不會有重複種類。</li>
+                    <li>階級：1～5 階各 12%、6～10 階各 7%、11～15 階各 1%。</li>
+                    <li>洗一次：1 顆石頭，每鎖一條多 1 顆。</li>
+                    <li>石頭鎖：第一條 2 顆、第二條 3 顆，鎖到解除為止。鑰匙鎖：20／30 把，只管一次。</li>
+                </ul>
             </div>
+        </section>
+    </main>
+
+    <dialog id="rollDialog">
+        <h2 id="rollTitle"></h2>
+        <div class="versus">
+            <div><h3>目前效果</h3><div id="rollOld"></div><p class="mass" id="massOld"></p></div>
+            <div><h3>變更效果</h3><div id="rollNew"></div><p class="mass" id="massNew"></p></div>
         </div>
-
-        <!-- Simulator Tab -->
-        <div id="tab-sim" class="tab-content active" style="position: relative;">
-            <div id="lockOverlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(224, 217, 203, 0.85); z-index:50; display:flex; justify-content:center; align-items:flex-start; padding-top: 50px; text-align:center;">
-                <div style="font-size:16px; font-weight:bold; color:#5E5545; padding: 20px; background: #F7F4EB; border-radius: 12px; border: 2px solid #C4B7A1; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-                    請先在上方輸入「石頭」與「鑰匙」持有數量
-                </div>
-            </div>
-            <div id="equipmentContainer"></div>
+        <p class="hint" id="rollTip"></p>
+        <div class="dialog-actions">
+            <button class="btn ghost" id="btnKeep">效果維持</button>
+            <button class="btn solid" id="btnTake">效果變更</button>
         </div>
+    </dialog>
 
-        <!-- Summary Modal (Previously Tab) -->
-        <div class="modal-overlay" id="summaryModalOverlay">
-            <div class="modal-content" style="max-height: 80vh; overflow-y: auto;">
-                <h3 style="color:#5E5545;text-align:center;margin-top:0;">你的詞條總和</h3>
-                <div id="scoreContainer" style="text-align:center; margin-bottom: 20px; background: #E0D9CB; padding: 15px; border-radius: 8px;">
-                    <div id="scoreTitle" style="font-size: 26px; font-weight: bold; margin-bottom: 5px;"></div>
-                    <div id="scoreQuote" style="font-size: 14px; font-style: italic; color: #888;"></div>
-                </div>
-                <div id="summaryContent"></div>
-                <button onclick="closeSummaryModal()" style="width: 100%; padding: 12px; background-color: #5E5545; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; margin-top: 15px; cursor: pointer;">
-                    關閉面板
-                </button>
-            </div>
-        </div>
+    <dialog id="sumDialog">
+        <h2>詞條總和</h2>
+        <div class="verdict"><div id="scoreTitle"></div><div id="scoreQuote"></div></div>
+        <div id="sumList"></div>
+        <p class="hint" id="sumCost"></p>
+        <div class="dialog-actions"><button class="btn solid" id="btnSumClose">關閉</button></div>
+    </dialog>
 
-        <!-- Reference Tab -->
-        <div id="tab-ref" class="tab-content">
-            <h3 style="color:#5E5545;text-align:center;">詞條範圍參考</h3>
-            <div id="referenceContent"></div>
-        </div>
-        
-        <!-- Calculator Tab -->
-        <div id="tab-calc" class="tab-content">
-            <h3 style="color:#5E5545;text-align:center;margin-bottom:15px;">期望計算器</h3>
-            
-            <div class="card">
-                <div class="card-title" style="font-size:16px; margin-bottom:10px;">初始狀態設定</div>
-                <div id="calcCurrentContainer"></div>
-            </div>
+    <div id="toast" role="status" aria-live="polite"></div>
 
-            <div class="card">
-                <div class="card-title" style="font-size:16px; margin-bottom:10px;">目標設定 (滿足任意設定即可)</div>
-                <div id="calcTargetContainer"></div>
-            </div>
-
-            <div class="card">
-                <div class="card-title" style="font-size:16px; margin-bottom:10px;">模擬設定</div>
-                <div class="calc-row" style="margin-top:10px;">
-                    <span style="font-size:14px; color:#5E5545; font-weight:bold; margin-right:10px;">模擬次數:</span>
-                    <select id="calcSimCount">
-                        <option value="1000">1000</option>
-                        <option value="5000">5000</option>
-                        <option value="10000" selected>10000</option>
-                        <option value="50000">50000</option>
-                    </select>
-                </div>
-                <div style="margin-top:15px;">
-                    <button class="btn-change" style="width:100%;" onclick="runSimulation()">開始計算</button>
-                </div>
-            </div>
-
-            <div class="card" id="calcResultCard" style="display:none;">
-                <div class="card-title" style="font-size:16px; margin-bottom:10px;">計算結果</div>
-                <div id="calcResultList"></div>
-            </div>
-        </div>
-
-        <!-- Bottom Navigation -->
-        <div class="bottom-nav">
-            <button id="nav-tab-sim" class="nav-btn active" onclick="openTab('tab-sim')">模擬器</button>
-            <button id="nav-tab-ref" class="nav-btn" onclick="openTab('tab-ref')">圖鑑</button>
-            <button id="nav-tab-calc" class="nav-btn" onclick="openTab('tab-calc')">計算器</button>
-        </div>
-
-        <!-- Bottom Sheet Modal -->
-        <div class="modal-overlay" id="modalOverlay">
-            <div class="modal-content">
-                <div class="modal-title" id="modalTitle">效果確認</div>
-                <div class="modal-grid">
-                    <div class="modal-col">
-                        <h4>目前效果</h4>
-                        <div id="modalOldStats"></div>
-                    </div>
-                    <div class="modal-col">
-                        <h4>變更效果</h4>
-                        <div id="modalNewStats"></div>
-                    </div>
-                </div>
-                <div class="modal-actions">
-                    <button class="btn-keep" onclick="resolveModal(false)">效果維持</button>
-                    <button class="btn-change" onclick="resolveModal(true)">效果變更</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
+    <script src="engine.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
