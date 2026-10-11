@@ -252,49 +252,54 @@ function buildCalc() {
         <select id="cTier${i}" aria-label="${i + 1} 號位階級">${tierOpts(11)}</select><span>階</span>
         <label class="check"><input type="checkbox" id="cLock${i}"> 已鎖</label>
     </div>`).join("");
-    $("calcTargets").innerHTML = `<span class="th">種類</span><span class="th">每件都要</span><span class="th">另外</span><span class="th">最低階級</span>` +
-        TYPES.map((t, i) => `<span class="tname">${t}</span>
-        <input type="checkbox" id="tReq${i}" aria-label="${t} 每件都要">
-        <select id="tQ${i}" aria-label="${t} 另外要幾條"></select>
-        <select id="tTier${i}" aria-label="${t} 最低階級">${tierOpts(1)}</select>`).join("");
-    $("calcTargets").addEventListener("change", syncCalc);
-    $("calcPieces").addEventListener("change", syncCalc);
+    const row = i => `<span class="tname">${TYPES[i]}</span>
+        <input type="checkbox" id="tReq${i}" aria-label="${TYPES[i]} 每件都要">
+        <span class="stepper"><button type="button" data-step="${i},-1" aria-label="${TYPES[i]} 減一條">−</button><b id="tQ${i}">0</b><button type="button" data-step="${i},1" aria-label="${TYPES[i]} 加一條">+</button></span>
+        <select id="tTier${i}" class="tier-col" aria-label="${TYPES[i]} 最低階級">${tierOpts(11)}</select>`;
+    const head = `<span class="th">種類</span><span class="th">每件</span><span class="th">另外</span><span class="th tier-col">最低階級</span>`;
+    $("calcTargets").innerHTML = head + MAIN_TYPES.map(row).join("");
+    $("calcTargetsMore").innerHTML = TYPES.map((_, i) => i).filter(i => !MAIN_TYPES.includes(i)).map(row).join("");
+    document.querySelector(".calc-form").addEventListener("change", syncCalc);
+    document.querySelector(".calc-form").addEventListener("click", ev => {
+        const b = ev.target.closest("[data-step]");
+        if (!b) return;
+        const [i, d] = b.dataset.step.split(",").map(Number);
+        extra[i] = Math.max(0, Math.min(piecesNow(), extra[i] + d));
+        syncCalc();
+    });
     setPreset([0, 3]);
 }
+// 優越、攻擊、彈藥、爆傷、爆率放在外面，其餘收在「其他詞條」
+const MAIN_TYPES = [0, 3, 2, 6, 7];
+const extra = TYPES.map(() => 0);
 function setPreset(ids) {
-    TYPES.forEach((_, i) => { $("tReq" + i).checked = ids.includes(i); $("tQ" + i).dataset.v = 0; });
+    TYPES.forEach((_, i) => { $("tReq" + i).checked = ids.includes(i); });
     syncCalc();
 }
-function readGoal() {
-    let req = 0;
+function syncCalc() {
+    const n = piecesNow();
+    const useTier = $("calcUseTier").checked;
+    let req = 0, total = 0;
     const quota = [], minTier = [];
     TYPES.forEach((_, i) => {
         const r = $("tReq" + i).checked;
+        extra[i] = Math.min(extra[i], n);
+        const q = r ? 0 : extra[i];
         if (r) req |= 1 << i;
-        quota.push(r ? 0 : +$("tQ" + i).value || 0);
-        minTier.push(+$("tTier" + i).value);
+        quota.push(q);
+        minTier.push(useTier ? +$("tTier" + i).value : 1);
+        total += r ? n : q;
+        $("tQ" + i).textContent = r ? "—" : q;
+        const st = $("tQ" + i).parentElement;
+        st.classList.toggle("off", r);
+        st.querySelectorAll("button").forEach((b, k) => { b.disabled = r || (k === 0 ? q <= 0 : q >= n); });
+        $("tTier" + i).disabled = !r && q === 0;
     });
-    return { req, quota, minTier };
-}
-function syncCalc(ev) {
-    const n = piecesNow();
-    if (ev && ev.target.id.startsWith("tQ")) ev.target.dataset.v = ev.target.value;
-    TYPES.forEach((_, i) => {
-        const q = $("tQ" + i), r = $("tReq" + i).checked;
-        const v = Math.min(n, +(q.dataset.v || 0));
-        let o = "";
-        for (let k = 0; k <= n; k++) o += `<option value="${k}" ${k === v ? "selected" : ""}>${k} 條</option>`;
-        q.innerHTML = o;
-        q.disabled = r;
-        $("tTier" + i).disabled = !r && v === 0;
-    });
+    document.querySelector(".calc-form").classList.toggle("show-tier", useTier);
     $("calcCurrentWrap").hidden = n !== 1;
-    const g = readGoal();
-    const nReq = TYPES.filter((_, i) => g.req >> i & 1).length;
-    const total = nReq * n + g.quota.reduce((a, b) => a + b, 0);
-    $("calcCount").textContent = `目前目標共 ${total} 條，${n} 件裝備最多放 ${n * 3} 條。`;
+    $("calcCount").textContent = `目前共 ${total} 條，${n} 件裝備最多放 ${n * 3} 條。`;
     $("calcCount").classList.toggle("error", total > n * 3);
-    return { ...g, total, pieces: n };
+    return { req, quota, minTier, total, pieces: n };
 }
 document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => setPreset(b.dataset.preset.split(",").map(Number)));
 
@@ -335,22 +340,28 @@ function runCalc() {
 }
 
 function showResults(results, old) {
+    const best = results[0];
+    if (best.avg === null) { $("calcResult").innerHTML = `<p class="error">每種策略都有裝備在 10,000 顆內洗不到，目標可能太高。</p>`; return; }
     const max = Math.max(...results.map(r => r.avg || 0));
-    if (results[0].avg === null) { $("calcResult").innerHTML = `<p class="error">每種策略都有裝備在 10,000 顆內洗不到，目標可能太高。</p>`; return; }
-    let h = `<ol class="rank">`;
+    let h = `<div class="answer">
+        <div class="answer-num"><b>${best.avg.toFixed(0)}</b> 顆<small>平均</small></div>
+        <p>一半的人在 ${best.median} 顆內洗完，九成的人在 ${best.p90} 顆內。</p>
+        <p>最省的洗法：${E.LOCK_STRATEGIES[best.strategy]}，${E.KEEP_POLICIES[+best.keepHigh]}。</p>
+    </div>`;
+    if (old && old.avg !== null) {
+        const d = old.avg - best.avg;
+        h += `<p class="hint">同樣的鎖法在舊機制平均要 ${old.avg.toFixed(0)} 顆，新機制${d >= 0 ? "省" : "多"} ${Math.abs(d).toFixed(0)} 顆。</p>`;
+    }
+    h += `<details class="more"><summary>看全部 ${results.length} 種洗法</summary><ol class="rank">`;
     results.forEach((r, i) => {
         h += `<li class="${i === 0 ? "best" : ""}">
             <div class="rank-name">${E.LOCK_STRATEGIES[r.strategy]}<span class="tag ${r.keepHigh ? "hi" : ""}">${E.KEEP_POLICIES[+r.keepHigh]}</span></div>
             ${r.avg === null ? `<div class="rank-num">洗不到</div>` : `
             <div class="bar"><i style="width:${(r.avg / max * 100).toFixed(1)}%"></i></div>
-            <div class="rank-num"><b>${r.avg.toFixed(1)}</b> 顆<small>中位數 ${r.median}，九成的人在 ${r.p90} 顆內</small></div>`}
+            <div class="rank-num"><b>${r.avg.toFixed(1)}</b> 顆<small>中位數 ${r.median}，九成在 ${r.p90} 顆內</small></div>`}
         </li>`;
     });
-    h += `</ol>`;
-    if (old && old.avg !== null) {
-        const d = old.avg - results[0].avg;
-        h += `<p class="hint">同樣的鎖法在舊機制平均要 ${old.avg.toFixed(1)} 顆，新機制${d >= 0 ? "省" : "多"} ${Math.abs(d).toFixed(1)} 顆。差距小於 1～2 顆時屬於模擬誤差。</p>`;
-    }
+    h += `</ol><p class="hint">各洗法差距在平均的 2% 以內時屬於模擬誤差。</p></details>`;
     $("calcResult").innerHTML = h;
 }
 $("btnCalc").onclick = runCalc;
