@@ -16,7 +16,6 @@
             <button role="tab" data-tab="sim" aria-selected="true">模擬</button>
             <button role="tab" data-tab="calc" aria-selected="false">期望計算</button>
             <button role="tab" data-tab="ref" aria-selected="false">階級表</button>
-            <button role="tab" data-tab="rule" aria-selected="false">機制</button>
         </nav>
     </header>
 
@@ -83,36 +82,6 @@
         <!-- 階級表 -->
         <section id="tab-ref" class="tab">
             <div class="table-wrap"><table id="refTable"></table></div>
-        </section>
-
-        <!-- 機制 -->
-        <section id="tab-rule" class="tab">
-            <div class="prose">
-                <h2>新機制：不會再洗出一模一樣的結果</h2>
-                <p>「效果變更」和「數值變更」洗出來的結果，如果跟目前的詞條<b>完全相同</b>，系統會重抽。只要有任何一條不同就算不同結果。</p>
-                <ul>
-                    <li>命中 1 階／攻擊 3 階／蓄力 5 階 → 不會再出現同樣這三條。</li>
-                    <li>命中 11 階／空／空 → 仍可能洗出命中 9 階／空／空（階級不同）。</li>
-                    <li>比較對象只有「目前的詞條」，之前出現過的結果不算。</li>
-                    <li>未鎖定的槽位全空時，洗完仍可能維持全空。</li>
-                </ul>
-                <h2>為什麼要留機率高的詞條</h2>
-                <p>被排除掉的機率會平均分給其他結果。目前的詞條越常見（低階、條數少），排掉的機率越大，洗到好結果的機會就越高。</p>
-                <p>以單條數值變更為例，洗到 12 階以上的機率：</p>
-                <ul>
-                    <li>目前 1～5 階：4 ÷ 88 = 4.55%</li>
-                    <li>目前 6～10 階：4 ÷ 93 = 4.30%</li>
-                    <li>目前 11 階：4 ÷ 99 = 4.04%</li>
-                </ul>
-                <p>這個差別只在「數值變更」明顯：留 1～5 階的詞條，下次其他階級的機率各多 13.6%；留 11 階以上只多 1%。「效果變更」時任何一組結果原本的機率都不到 1%，留哪邊幾乎沒差。模擬的確認視窗會標出兩邊各自的加成。</p>
-                <h2>基本機率與花費</h2>
-                <ul>
-                    <li>槽位出現率：1 號 100%、2 號 50%、3 號 30%。同一件裝備不會有重複種類。</li>
-                    <li>階級：1～5 階各 12%、6～10 階各 7%、11～15 階各 1%。</li>
-                    <li>洗一次：1 顆石頭，每鎖一條多 1 顆。</li>
-                    <li>石頭鎖：第一條 2 顆、第二條 3 顆，鎖到解除為止。鑰匙鎖：一樣鎖到解除為止，但不是一次付清，每洗一次扣 20 把（第二條 30 把）。</li>
-                </ul>
-            </div>
         </section>
     </main>
 

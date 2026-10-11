@@ -198,13 +198,6 @@ tr.t-high td, tr.t-high th { color: var(--blue); background: var(--blue-soft); }
 tr.t-max td, tr.t-max th { color: #4cc3ff; background: var(--black-line); }
 tfoot td, tfoot th { color: var(--mute); border-bottom: 0; }
 
-/* 機制 */
-.prose { max-width: 62ch; background: var(--panel); padding: 22px 24px; }
-.prose h2 { font-size: 18px; margin: 26px 0 8px; }
-.prose h2:first-child { margin-top: 0; }
-.prose ul { padding-left: 1.3em; margin: 8px 0; }
-.prose li { margin-bottom: 4px; }
-
 @media (max-width: 760px) {
     .masthead { flex-direction: column; align-items: stretch; gap: 0; padding-top: 10px; }
     .masthead h1 { font-size: 17px; padding-bottom: 4px; }
