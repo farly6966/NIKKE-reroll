@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
     <header class="masthead">
@@ -61,9 +61,14 @@
                         <button class="btn ghost" data-preset="0">只要優越</button>
                         <button class="btn ghost" data-preset="0,3">優越 + 攻擊</button>
                     </div>
-                    <p class="hint">「每件都要」是每件裝備各一條。「另外」是整套合計幾條，分在哪幾件都可以，例如爆傷 2、爆率 1、彈藥 1。</p>
+                    <p class="hint">「每件」是每件裝備各一條。「另外」用 + − 調整整套合計幾條，分在哪幾件都可以。</p>
                     <div class="tgrid" id="calcTargets"></div>
+                    <details class="more">
+                        <summary>其他詞條</summary>
+                        <div class="tgrid" id="calcTargetsMore"></div>
+                    </details>
                     <p class="hint" id="calcCount"></p>
+                    <label class="check"><input type="checkbox" id="calcUseTier"> 也要指定最低階級</label>
                     <div class="row">
                         <label for="calcRuns">模擬次數</label>
                         <select id="calcRuns">
@@ -75,8 +80,8 @@
                     <button class="btn solid wide" id="btnCalc">開始計算</button>
                 </div>
                 <div class="calc-out">
-                    <h2>各策略總共要花的石頭</h2>
-                    <div id="calcResult"><p class="hint">設定目標後按「開始計算」。會比較 5 種鎖定方式 × 2 種保留方式，數字是所有件數加起來的總花費。</p></div>
+                    <h2>要花多少石頭</h2>
+                    <div id="calcResult"><p class="hint">設定目標後按「開始計算」，會顯示最省的洗法和所有件數加起來的石頭數。</p></div>
                 </div>
             </div>
         </section>
@@ -110,7 +115,7 @@
 
     <div id="toast" role="status" aria-live="polite"></div>
 
-    <script src="engine.js?v=5"></script>
-    <script src="app.js?v=5"></script>
+    <script src="engine.js?v=6"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>

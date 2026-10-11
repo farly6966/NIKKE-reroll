@@ -219,3 +219,19 @@ tfoot td, tfoot th { color: var(--mute); border-bottom: 0; }
 .tgrid select { padding: 4px 6px; font-size: 15px; }
 .tgrid select:disabled { opacity: .35; }
 .tgrid .tname { min-width: 0; font-weight: 500; }
+.tier-col { display: none; }
+.show-tier .tier-col { display: revert; }
+.tgrid { grid-template-columns: 1fr auto auto; }
+.show-tier .tgrid { grid-template-columns: 1fr auto auto auto; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--rail); }
+.stepper button { width: 34px; height: 32px; border: 0; background: var(--steel); font: 700 18px/1 var(--display); }
+.stepper b { width: 30px; text-align: center; font: 700 16px var(--display); }
+.stepper.off { opacity: .35; }
+.more { margin: 10px 0; }
+.more summary { cursor: pointer; color: var(--mute); font-size: 14px; padding: 6px 0; }
+.more[open] summary { margin-bottom: 6px; }
+.answer { padding: 16px 18px; background: var(--ink); color: var(--steel); }
+.answer-num { font-family: var(--display); font-size: 18px; }
+.answer-num b { font-size: 46px; line-height: 1; color: var(--module); margin-right: 4px; }
+.answer-num small { margin-left: 8px; opacity: .7; }
+.answer p { margin: 8px 0 0; }
