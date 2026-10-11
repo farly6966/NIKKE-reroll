@@ -1,760 +1,320 @@
-const STAT_TIERS = {
-    "優越代碼傷害": [9.54, 10.94, 12.34, 13.75, 15.15, 16.55, 17.95, 19.35, 20.75, 22.15, 23.56, 24.96, 26.36, 27.76, 29.16],
-    "命中率": [4.77, 5.47, 6.18, 6.88, 7.59, 8.29, 8.99, 9.70, 10.40, 11.11, 11.81, 12.51, 13.22, 13.92, 14.63],
-    "最大彈藥數": [27.84, 31.93, 36.05, 40.16, 44.28, 48.39, 52.50, 56.60, 60.71, 64.82, 68.93, 73.04, 77.15, 81.26, 85.37],
-    "攻擊力": [4.77, 5.47, 6.18, 6.88, 7.59, 8.29, 8.99, 9.70, 10.40, 11.11, 11.81, 12.51, 13.22, 13.92, 14.63],
-    "蓄力傷害": [4.77, 5.47, 6.18, 6.88, 7.59, 8.29, 8.99, 9.70, 10.40, 11.11, 11.81, 12.51, 13.22, 13.92, 14.63],
-    "蓄力速度": [1.98, 2.28, 2.57, 2.86, 3.16, 3.45, 3.75, 4.04, 4.33, 4.63, 4.92, 5.22, 5.51, 5.80, 6.09],
-    "暴擊傷害": [6.64, 7.62, 8.60, 9.58, 10.56, 11.54, 12.52, 13.50, 14.48, 15.46, 16.44, 17.42, 18.40, 19.38, 20.36],
-    "暴擊率": [2.30, 2.64, 2.98, 3.32, 3.66, 4.00, 4.34, 4.68, 5.02, 5.34, 5.70, 6.04, 6.38, 6.72, 7.07],
-    "防禦力": [4.77, 5.47, 6.18, 6.88, 7.59, 8.29, 8.99, 9.70, 10.40, 11.11, 11.81, 12.51, 13.22, 13.92, 14.63]
-};
-const STAT_TYPES = Object.keys(STAT_TIERS);
-const STAT_WEIGHTS = [0.10, 0.12, 0.12, 0.10, 0.12, 0.12, 0.12, 0.10, 0.10];
-const SLOT_PROBS = [1.0, 0.5, 0.3];
+const E = window.Engine;
+const { TYPES, STAT_TIERS, EMPTY } = E;
+const SLOTS = ["頭", "甲", "手", "鞋"];
+const $ = id => document.getElementById(id);
+const SAVE_KEY = "nikke-reroll-v2";
 
-function randomChoice(items, weights) {
-    let total = weights.reduce((a, b) => a + b, 0);
-    let r = Math.random() * total;
-    let cum = 0;
-    for(let i = 0; i < items.length; i++) {
-        cum += weights[i];
-        if (r < cum) return items[i];
-    }
-    return items[items.length - 1];
+const blankGear = name => ({
+    name, awakened: false,
+    lines: [0, 1, 2].map(() => ({ t: EMPTY, k: 0 })),
+    stone: [false, false, false], key: [false, false, false]
+});
+let state = { stones: 0, keys: 0, gear: SLOTS.map(blankGear) };
+
+function save() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ state, bs: $("inputStones").value, bk: $("inputKeys").value })); } catch (e) { /* 無法儲存時照常運作 */ }
 }
-
-function getRandomType(exclude = []) {
-    let available = [];
-    let weights = [];
-    for(let i=0; i<STAT_TYPES.length; i++) {
-        if (!exclude.includes(STAT_TYPES[i])) {
-            available.push(STAT_TYPES[i]);
-            weights.push(STAT_WEIGHTS[i]);
+function load() {
+    try {
+        const d = JSON.parse(localStorage.getItem(SAVE_KEY));
+        if (d && d.state && d.state.gear && d.state.gear.length === 4) {
+            state = d.state;
+            $("inputStones").value = d.bs || "";
+            $("inputKeys").value = d.bk || "";
         }
-    }
-    if (available.length === 0) return "空詞條";
-    return randomChoice(available, weights);
+    } catch (e) { /* 忽略壞掉的存檔 */ }
 }
 
-function rollTier(isAwaken = false) {
-    if (isAwaken) return 11;
-    let r = Math.random();
-    if (r < 0.60) return Math.floor(Math.random() * 5) + 1;
-    else if (r < 0.95) return Math.floor(Math.random() * 5) + 6;
-    else return Math.floor(Math.random() * 5) + 11;
+// ---------- 小工具 ----------
+let toastTimer;
+function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+const pct = p => p <= 0 ? "—" : (p * 100 >= 0.01 ? (p * 100).toFixed(p * 100 >= 1 ? 2 : 3) : (p * 100).toExponential(1)) + "%";
+const tierClass = k => k === 15 ? "t-max" : k >= 12 ? "t-high" : "";
+
+function lineHTML(l, extra = "") {
+    if (l.t === EMPTY) return `<div class="line empty ${extra}"><span class="line-name">空詞條</span></div>`;
+    const name = TYPES[l.t];
+    let segs = "";
+    for (let i = 1; i <= 15; i++) segs += `<i class="${i <= l.k ? "on" : ""}"></i>`;
+    return `<div class="line ${tierClass(l.k)} ${extra}">
+        <span class="line-name">${name}</span>
+        <span class="line-val">${STAT_TIERS[name][l.k - 1].toFixed(2)}%</span>
+        <span class="line-tier">${l.k} 階</span>
+        <span class="gauge" aria-hidden="true">${segs}</span>
+    </div>`;
 }
 
-function formatStat(type, tier) {
-    if (type === "空詞條" || tier === 0) return "—";
-    return `[${type}] ${STAT_TIERS[type][tier-1]}% (${tier}階)`;
-}
-
-// Global state
-let totalStones = 0;
-let totalKeys = 0;
-
-let equipmentData = [
-    { name: "頭", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
-    { name: "甲", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
-    { name: "手", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
-    { name: "鞋", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] }
-];
-
-function canAfford(reqStones, reqKeys) {
-    let inputStones = parseInt(document.getElementById('inputStones').value);
-    let inputKeys = parseInt(document.getElementById('inputKeys').value);
-    
-    if (reqStones > 0 && !isNaN(inputStones) && inputStones > 0) {
-        if (inputStones - totalStones - reqStones < 0) {
-            alert("你沒石頭了餓阿");
-            return false;
-        }
-    }
-    if (reqKeys > 0 && !isNaN(inputKeys) && inputKeys > 0) {
-        if (inputKeys - totalKeys - reqKeys < 0) {
-            alert("你沒鑰匙了餓阿");
-            return false;
-        }
-    }
+function budget(id) { const v = parseInt($(id).value, 10); return isNaN(v) || v < 0 ? null : v; }
+function afford(stones, keys) {
+    const bs = budget("inputStones"), bk = budget("inputKeys");
+    if (stones && bs !== null && state.stones + stones > bs) { toast("你沒石頭了餓阿"); return false; }
+    if (keys && bk !== null && state.keys + keys > bk) { toast("你沒鑰匙了餓阿"); return false; }
     return true;
 }
+function spend(stones, keys) { state.stones += stones; state.keys += keys; }
+const lockedOf = g => g.lines.map((_, i) => g.stone[i] || g.key[i]);
+const lockCount = g => lockedOf(g).filter(Boolean).length;
 
-function addCost(stones, keys) {
-    totalStones += stones;
-    totalKeys += keys;
-    updateTopBar();
+// ---------- 模擬畫面 ----------
+function renderLedger() {
+    $("spentStones").textContent = state.stones;
+    $("spentKeys").textContent = state.keys;
+    const bs = budget("inputStones"), bk = budget("inputKeys");
+    $("leftStones").textContent = bs === null ? "已花" : `已花，剩 ${bs - state.stones}`;
+    $("leftKeys").textContent = bk === null ? "已花" : `已花，剩 ${bk - state.keys}`;
 }
 
-function updateTopBar() {
-    let rawStones = document.getElementById('inputStones').value.trim();
-    let rawKeys = document.getElementById('inputKeys').value.trim();
-    
-    // Toggle Lock Overlay
-    let overlay = document.getElementById('lockOverlay');
-    if (rawStones !== "" && rawKeys !== "") {
-        overlay.style.display = "none";
-    } else {
-        overlay.style.display = "flex";
-    }
-
-    let inputStones = parseInt(rawStones);
-    let inputKeys = parseInt(rawKeys);
-    
-    let elStones = document.getElementById('displayStones');
-    let elKeys = document.getElementById('displayKeys');
-
-    if (!isNaN(inputStones) && inputStones > 0) {
-        elStones.innerHTML = `剩餘 <span class="red-text">${inputStones - totalStones}</span> (耗: ${totalStones})`;
-    } else {
-        elStones.innerHTML = `已耗石頭: <span class="red-text">${totalStones}</span>`;
-    }
-
-    if (!isNaN(inputKeys) && inputKeys > 0) {
-        elKeys.innerHTML = `剩餘 <span class="red-text">${inputKeys - totalKeys}</span> (耗: ${totalKeys})`;
-    } else {
-        elKeys.innerHTML = `已耗鑰匙: <span class="red-text">${totalKeys}</span>`;
-    }
-}
-
-document.getElementById('inputStones').addEventListener('input', updateTopBar);
-document.getElementById('inputKeys').addEventListener('input', updateTopBar);
-
-function renderUI() {
-    let container = document.getElementById('equipmentContainer');
-    container.innerHTML = '';
-    equipmentData.forEach((eq, eqIdx) => {
-        let div = document.createElement('div');
-        div.className = 'card';
-        
-        let header = document.createElement('div');
-        header.className = 'card-header';
-        header.innerHTML = `
-            <div class="card-title">${eq.name}</div>
-            <div class="card-actions">
-                <button onclick="doReset(${eqIdx})" class="btn-reset">重置</button>
-                <button onclick="doAwaken(${eqIdx})" class="btn-awaken" ${eq.awakened ? 'disabled' : ''}>開光</button>
-            </div>
-        `;
-        div.appendChild(header);
-
-        for (let i = 0; i < 3; i++) {
-            let statRow = document.createElement('div');
-            statRow.className = 'stat-row';
-            
-            let t = eq.stats[i].type;
-            let tier = eq.stats[i].tier;
-            
-            let statClass = "stat-box";
-            if (t !== "空詞條" && tier > 0) {
-                if (tier === 15) statClass += " tier-max";
-                else if (tier >= 12) statClass += " tier-high";
-            }
-            
-            let stoneDisabled = eq.keyLocks[i] ? 'disabled' : '';
-            let keyDisabled = eq.stoneLocks[i] ? 'disabled' : '';
-            
-            statRow.innerHTML = `
-                <div class="${statClass}">${formatStat(t, tier)}</div>
+function render() {
+    $("gear").innerHTML = state.gear.map((g, gi) => {
+        const n = lockCount(g);
+        const rollCost = 1 + n;
+        const canValue = g.lines.some((l, i) => l.t !== EMPTY && !(g.stone[i] || g.key[i]));
+        const lines = g.lines.map((l, i) => {
+            const isLocked = g.stone[i] || g.key[i];
+            const full = !isLocked && n >= 2;
+            const dis = !g.awakened || l.t === EMPTY || full;
+            const cost = n === 0 ? 2 : 3;
+            return `<div class="slot ${isLocked ? "locked" : ""}">
+                <span class="slot-no">${i + 1}</span>
+                ${lineHTML(l)}
                 <div class="locks">
-                    <label style="${eq.keyLocks[i] ? 'opacity:0.5; pointer-events:none;' : ''}">
-                        <input type="checkbox" id="stone_${eqIdx}_${i}" ${eq.stoneLocks[i] ? 'checked' : ''} ${stoneDisabled} onchange="toggleStone(${eqIdx}, ${i})">
-                        石頭
-                    </label>
-                    <label style="${eq.stoneLocks[i] ? 'opacity:0.5; pointer-events:none;' : ''}">
-                        <input type="checkbox" id="key_${eqIdx}_${i}" ${eq.keyLocks[i] ? 'checked' : ''} ${keyDisabled} onchange="toggleKey(${eqIdx}, ${i})">
-                        鑰匙
-                    </label>
+                    <button class="lock stone ${g.stone[i] ? "on" : ""}" data-act="stone" data-g="${gi}" data-i="${i}"
+                        ${(dis && !g.stone[i]) || g.key[i] ? "disabled" : ""} aria-pressed="${g.stone[i]}">${g.stone[i] ? "石頭鎖中" : `石頭鎖 ${cost}`}</button>
+                    <button class="lock key ${g.key[i] ? "on" : ""}" data-act="key" data-g="${gi}" data-i="${i}"
+                        ${(dis && !g.key[i]) || g.stone[i] ? "disabled" : ""} aria-pressed="${g.key[i]}">${g.key[i] ? "鑰匙鎖中" : `鑰匙鎖 ${cost * 10}`}</button>
                 </div>
-            `;
-            div.appendChild(statRow);
-        }
-
-        let btnRow = document.createElement('div');
-        btnRow.className = 'action-buttons';
-        btnRow.innerHTML = `
-            <button class="btn-effect" onclick="doRerollEffect(${eqIdx})">效果變更</button>
-            <button class="btn-value" onclick="doRerollValue(${eqIdx})">%重新設定數值</button>
-        `;
-        div.appendChild(btnRow);
-        
-        container.appendChild(div);
-    });
-    updateSummary();
-}
-
-function resetEverything() {
-    if (!confirm("確定要重置所有裝備，並清空所有石頭與鑰匙數量嗎？")) return;
-    
-    document.getElementById('inputStones').value = '';
-    document.getElementById('inputKeys').value = '';
-    
-    totalStones = 0;
-    totalKeys = 0;
-    
-    equipmentData = [
-        { name: "頭", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
-        { name: "甲", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
-        { name: "手", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] },
-        { name: "鞋", awakened: false, stats: Array(3).fill().map(() => ({type: "空詞條", tier: 0})), stoneLocks: [false,false,false], keyLocks: [false,false,false] }
-    ];
-    
-    updateTopBar();
-    renderUI();
-}
-
-function doReset(eqIdx) {
-    equipmentData[eqIdx].awakened = false;
-    equipmentData[eqIdx].stats = Array(3).fill().map(() => ({type: "空詞條", tier: 0}));
-    equipmentData[eqIdx].stoneLocks = [false, false, false];
-    equipmentData[eqIdx].keyLocks = [false, false, false];
-    renderUI();
-}
-
-function doAwaken(eqIdx) {
-    if (equipmentData[eqIdx].awakened) return;
-    if (!canAfford(1, 0)) return;
-    addCost(1, 0);
-    equipmentData[eqIdx].awakened = true;
-    let usedTypes = [];
-    for(let i=0; i<3; i++) {
-        if(Math.random() < SLOT_PROBS[i]) {
-            let newT = getRandomType(usedTypes);
-            usedTypes.push(newT);
-            equipmentData[eqIdx].stats[i] = {type: newT, tier: 11};
-        }
-    }
-    renderUI();
-}
-
-function toggleStone(eqIdx, slotIdx) {
-    let eq = equipmentData[eqIdx];
-    let cb = document.getElementById(`stone_${eqIdx}_${slotIdx}`);
-    if (cb.checked) {
-        let lockedCount = eq.stoneLocks.filter(v=>v).length + eq.keyLocks.filter(v=>v).length;
-        let cost = (lockedCount === 0) ? 2 : 3;
-        
-        if (!canAfford(cost, 0)) { cb.checked = false; return; }
-        if (confirm(`是否要鎖定詞條，需要石頭 ${cost} 個`)) {
-            addCost(cost, 0);
-            eq.stoneLocks[slotIdx] = true;
-            renderUI();
-        } else {
-            cb.checked = false;
-        }
-    } else {
-        if (confirm("是否確定要解除鎖定？")) {
-            eq.stoneLocks[slotIdx] = false;
-            renderUI();
-        } else {
-            cb.checked = true;
-        }
-    }
-}
-
-function toggleKey(eqIdx, slotIdx) {
-    let eq = equipmentData[eqIdx];
-    let cb = document.getElementById(`key_${eqIdx}_${slotIdx}`);
-    if (cb.checked) {
-        let lockedCount = eq.stoneLocks.filter(v=>v).length + eq.keyLocks.filter(v=>v).length;
-        let cost = (lockedCount === 0) ? 20 : 30;
-        
-        if (!canAfford(0, cost)) { cb.checked = false; return; }
-        if (confirm(`是否要鎖定詞條，需要鑰匙 ${cost} 個`)) {
-            addCost(0, cost);
-            eq.keyLocks[slotIdx] = true;
-            renderUI();
-        } else {
-            cb.checked = false;
-        }
-    } else {
-        if (confirm("是否確定要解除鎖定？")) {
-            eq.keyLocks[slotIdx] = false;
-            renderUI();
-        } else {
-            cb.checked = true;
-        }
-    }
-}
-
-let pendingReroll = null;
-
-function showModal(title, oldStats, newStats, onComplete) {
-    document.getElementById('modalTitle').innerText = title;
-    
-    let oldContainer = document.getElementById('modalOldStats');
-    let newContainer = document.getElementById('modalNewStats');
-    oldContainer.innerHTML = '';
-    newContainer.innerHTML = '';
-    
-    for(let i=0; i<3; i++) {
-        let t1 = oldStats[i].type; let tier1 = oldStats[i].tier;
-        let d1 = document.createElement('div');
-        d1.className = "stat-box" + (tier1 === 15 ? " tier-max" : (tier1 >= 12 ? " tier-high" : ""));
-        d1.innerText = formatStat(t1, tier1);
-        oldContainer.appendChild(d1);
-        
-        let t2 = newStats[i].type; let tier2 = newStats[i].tier;
-        let changed = (t1 !== t2 || tier1 !== tier2);
-        let d2 = document.createElement('div');
-        d2.className = "stat-box" + (tier2 === 15 ? " tier-max" : (tier2 >= 12 ? " tier-high" : ""));
-        if (changed && t2 !== "空詞條") d2.classList.add('changed-highlight');
-        d2.innerText = formatStat(t2, tier2);
-        newContainer.appendChild(d2);
-    }
-    
-    document.getElementById('modalOverlay').classList.add('active');
-    pendingReroll = onComplete;
-}
-
-function resolveModal(replace) {
-    document.getElementById('modalOverlay').classList.remove('active');
-    if (pendingReroll) pendingReroll(replace);
-    pendingReroll = null;
-}
-
-function doRerollEffect(eqIdx) {
-    let eq = equipmentData[eqIdx];
-    if (!eq.awakened) return;
-    let lockedCount = 0;
-    for(let i=0; i<3; i++) if(eq.stoneLocks[i] || eq.keyLocks[i]) lockedCount++;
-    if (lockedCount > 2) return;
-    
-    let stoneCost = 1 + lockedCount;
-    if (!canAfford(stoneCost, 0)) return;
-    
-    addCost(stoneCost, 0);
-    
-    let lockedSlots = [];
-    let usedTypes = [];
-    for(let i=0; i<3; i++) {
-        lockedSlots[i] = eq.stoneLocks[i] || eq.keyLocks[i];
-        if (lockedSlots[i] && eq.stats[i].type !== "空詞條") usedTypes.push(eq.stats[i].type);
-    }
-    
-    let newStats = JSON.parse(JSON.stringify(eq.stats));
-    for(let i=0; i<3; i++) {
-        if (!lockedSlots[i]) {
-            if (Math.random() < SLOT_PROBS[i]) {
-                let newT = getRandomType(usedTypes);
-                usedTypes.push(newT);
-                newStats[i] = {type: newT, tier: rollTier()};
-            } else {
-                newStats[i] = {type: "空詞條", tier: 0};
-            }
-        }
-    }
-    
-    showModal("效果變更確認", eq.stats, newStats, (replace) => {
-        if (replace) eq.stats = newStats;
-        eq.keyLocks = [false, false, false];
-        renderUI();
-    });
-}
-
-function doRerollValue(eqIdx) {
-    let eq = equipmentData[eqIdx];
-    if (!eq.awakened) return;
-    let lockedCount = 0;
-    for(let i=0; i<3; i++) if(eq.stoneLocks[i] || eq.keyLocks[i]) lockedCount++;
-    if (lockedCount > 2) return;
-    
-    let stoneCost = 1 + lockedCount;
-    if (!canAfford(stoneCost, 0)) return;
-    addCost(stoneCost, 0);
-    
-    let lockedSlots = [];
-    for(let i=0; i<3; i++) lockedSlots[i] = eq.stoneLocks[i] || eq.keyLocks[i];
-    
-    let newStats = JSON.parse(JSON.stringify(eq.stats));
-    for(let i=0; i<3; i++) {
-        if (newStats[i].type !== "空詞條" && !lockedSlots[i]) {
-            newStats[i].tier = rollTier();
-        }
-    }
-    
-    showModal("數值變更確認", eq.stats, newStats, (replace) => {
-        if (replace) eq.stats = newStats;
-        eq.keyLocks = [false, false, false];
-        renderUI();
-    });
-}
-
-function openTab(tabId) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-    document.getElementById(tabId).classList.add('active');
-    document.getElementById('nav-' + tabId).classList.add('active');
-    
-    // Toggle top bar visibility
-    let topBar = document.getElementById('topBar');
-    if (tabId === 'tab-sim') {
-        topBar.style.display = 'block';
-    } else {
-        topBar.style.display = 'none';
-    }
-}
-
-function openSummaryModal() {
-    updateSummary();
-    document.getElementById('summaryModalOverlay').classList.add('active');
-}
-
-function closeSummaryModal() {
-    document.getElementById('summaryModalOverlay').classList.remove('active');
-}
-
-function updateSummary() {
-    let sums = {};
-    STAT_TYPES.forEach(t => sums[t] = 0);
-    
-    equipmentData.forEach(eq => {
-        eq.stats.forEach(st => {
-            if (st.type !== "空詞條") {
-                sums[st.type] += STAT_TIERS[st.type][st.tier-1];
-            }
-        });
-    });
-    
-    let score = 0;
-    score += sums["優越代碼傷害"] * 0.6;
-    score += sums["攻擊力"] * 0.8;
-    score += sums["最大彈藥數"] * 0.05;
-    score += sums["蓄力速度"] * 0.8;
-    score += sums["暴擊傷害"] * 0.2;
-    score += sums["暴擊率"] * 0.6;
-    score += sums["蓄力傷害"] * 0.1;
-
-    let title = "";
-    let quote = "";
-    let titleColor = "#E88D38";
-    
-    if (score >= 110) {
-        title = "共鬥天帝"; quote = "詞條掛發我，求求了"; titleColor = "#FF3333";
-    } else if (score >= 95) {
-        title = "個突皇帝"; quote = "我命令你馬上上號帶我前百"; titleColor = "#FF8800";
-    } else if (score >= 80) {
-        title = "凱瑞大C"; quote = "共鬥亮出戰力，其他人都要自覺跪下"; titleColor = "#E88D38";
-    } else if (score >= 60) {
-        title = "也就那樣"; quote = "下次會戰前記得提升不然優化你"; titleColor = "#1CB0F6";
-    } else if (score >= 40) {
-        title = "你洗了嗎"; quote = "不會吧你還有錢吧去買石頭阿"; titleColor = "#5E5545";
-    } else if (score >= 20) {
-        title = "路邊一條"; quote = "記得把輔助技能拉滿，自覺一點"; titleColor = "#888888";
-    } else {
-        title = ":)"; quote = ":)"; titleColor = "#AAAAAA";
-    }
-    
-    document.getElementById('scoreTitle').innerText = title;
-    document.getElementById('scoreTitle').style.color = titleColor;
-    document.getElementById('scoreQuote').innerHTML = `${quote}<br><br><span style="color:#5E5545;font-weight:bold;">這輪總共消耗：${totalStones} 顆石頭 / ${totalKeys} 把鑰匙</span>`;
-    
-    let container = document.getElementById('summaryContent');
-    container.innerHTML = '';
-    
-    let hasStats = false;
-    STAT_TYPES.forEach(t => {
-        if (sums[t] > 0) {
-            hasStats = true;
-            let div = document.createElement('div');
-            div.className = "summary-item";
-            div.innerHTML = `<span>${t}</span> <span>+${sums[t].toFixed(2)}%</span>`;
-            container.appendChild(div);
-        }
-    });
-    
-    if (!hasStats) {
-        container.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">目前沒有任何詞條</div>';
-    }
-}
-
-function initReference() {
-    let container = document.getElementById('referenceContent');
-    container.innerHTML = '';
-    STAT_TYPES.forEach(t => {
-        let div = document.createElement('div');
-        div.className = "summary-item";
-        div.innerHTML = `<span>${t}</span> <span>${STAT_TIERS[t][0].toFixed(2)}% ~ ${STAT_TIERS[t][14].toFixed(2)}%</span>`;
-        container.appendChild(div);
-    });
-}
-
-function buildCalculatorUI() {
-    let currHtml = '';
-    for(let i=0; i<3; i++) {
-        let typeOpts = '<option value="空詞條">空詞條</option>' + STAT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
-        let tierOpts = '';
-        for(let j=1; j<=15; j++) tierOpts += `<option value="${j}" ${j===11?'selected':''}>${j}</option>`;
-        
-        currHtml += `
-        <div class="calc-row">
-            <span style="font-size:14px; font-weight:bold; margin-right:8px; white-space:nowrap;">槽位${i+1}</span>
-            <select id="calc_cur_type_${i}" style="flex:1; min-width:0;">${typeOpts}</select>
-            <select id="calc_cur_tier_${i}" style="margin-left:5px;">${tierOpts}</select> <span style="font-size:12px; margin-left:3px; white-space:nowrap;">階</span>
-            <label style="font-size:14px; margin-left:8px; white-space:nowrap; display:flex; align-items:center;">
-                <input type="checkbox" id="calc_cur_lock_${i}" style="margin-right:2px; transform:scale(1.2);"> 鎖
-            </label>
-        </div>`;
-    }
-    document.getElementById('calcCurrentContainer').innerHTML = currHtml;
-
-    let tgtHtml = '';
-    for(let i=0; i<6; i++) {
-        let typeOpts = '<option value="空詞條">空詞條</option>' + STAT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
-        let tierOpts = '';
-        for(let j=1; j<=15; j++) tierOpts += `<option value="${j}" ${j===11?'selected':''}>${j}</option>`;
-        
-        tgtHtml += `
-        <div class="calc-row">
-            <span style="font-size:14px; font-weight:bold; margin-right:8px;">目標${i+1}</span>
-            <select id="calc_tgt_type_${i}" style="flex:1;">${typeOpts}</select>
-            <select id="calc_tgt_tier_${i}" style="margin-left:5px;">${tierOpts}</select> <span style="font-size:12px; margin-left:3px;">階</span>
-        </div>`;
-    }
-    document.getElementById('calcTargetContainer').innerHTML = tgtHtml;
-}
-
-function isValidType(statType, targets) {
-    if (statType === "空詞條") return false;
-    return targets.some(tgt => tgt.type === statType);
-}
-
-function isValidTypeTier(statType, statTier, targets) {
-    if (statType === "空詞條") return false;
-    return targets.some(tgt => tgt.type === statType && statTier >= tgt.tier);
-}
-
-function checkTypesReady(state, targets) {
-    if (targets.length === 0) return true;
-    let count = 0;
-    for (let s of state) {
-        if (isValidType(s.type, targets)) count++;
-    }
-    return count >= targets.length;
-}
-
-function checkFullGraduated(state, targets) {
-    if (targets.length === 0) return true;
-    let count = 0;
-    for (let s of state) {
-        if (isValidTypeTier(s.type, s.tier, targets)) count++;
-    }
-    return count >= targets.length;
-}
-
-// Phase 1: Lock by TYPE match (ignore tier)
-function applyPhase1Strategy(strategyId, state, targets) {
-    switch(strategyId) {
-        case 0: // 只要有有效詞條就鎖
-            for (let i=0; i<3; i++) {
-                if (!state[i].locked && isValidType(state[i].type, targets)) {
-                    state[i].locked = true;
-                }
-            }
-            break;
-        case 1: // 先鎖三號詞條再鎖二號
-            if (!state[2].locked && isValidType(state[2].type, targets)) {
-                state[2].locked = true;
-            } else if (state[2].locked && !state[1].locked && isValidType(state[1].type, targets)) {
-                state[1].locked = true;
-            }
-            break;
-        case 2: // 二三號詞條只要有效就鎖
-            for (let i=1; i<3; i++) {
-                if (!state[i].locked && isValidType(state[i].type, targets)) {
-                    state[i].locked = true;
-                }
-            }
-            break;
-        case 3: // 一二號位有效且高於目標數值時鎖，否則先鎖3再鎖2
-            {
-                let didLock = false;
-                for (let i=0; i<2; i++) {
-                    if (!state[i].locked && isValidTypeTier(state[i].type, state[i].tier, targets)) {
-                        state[i].locked = true;
-                        didLock = true;
-                    }
-                }
-                if (!didLock) {
-                    if (!state[2].locked && isValidType(state[2].type, targets)) {
-                        state[2].locked = true;
-                    } else if (state[2].locked && !state[1].locked && isValidType(state[1].type, targets)) {
-                        state[1].locked = true;
-                    }
-                }
-            }
-            break;
-        case 4: // 二號位有效且高於目標數值時鎖，否則先鎖3再鎖2
-            {
-                let didLock = false;
-                if (!state[1].locked && isValidTypeTier(state[1].type, state[1].tier, targets)) {
-                    state[1].locked = true;
-                    didLock = true;
-                }
-                if (!didLock) {
-                    if (!state[2].locked && isValidType(state[2].type, targets)) {
-                        state[2].locked = true;
-                    } else if (state[2].locked && !state[1].locked && isValidType(state[1].type, targets)) {
-                        state[1].locked = true;
-                    }
-                }
-            }
-            break;
-    }
-}
-
-const STRATEGY_NAMES = [
-    "只要有有效詞條就鎖",
-    "先鎖三號詞條再鎖二號",
-    "二三號詞條只要有效就鎖",
-    "一二號位有效且高於目標數值時鎖，否則先鎖3再鎖2",
-    "二號位有效且高於目標數值時鎖，否則先鎖3再鎖2"
-];
-
-function runOneStrategy(strategyId, initialState, targets, simCount) {
-    let totalStones = 0;
-    let successCount = 0;
-    let needTierCheck = targets.some(t => t.tier > 1);
-
-    for (let iter = 0; iter < simCount; iter++) {
-        let state = initialState.map(s => ({...s}));
-        let stonesUsed = 0;
-        let currentLocks = 0;
-
-        // === Phase 1: Effect Reroll - find correct TYPES ===
-        while (!checkTypesReady(state, targets) && stonesUsed < 10000) {
-            applyPhase1Strategy(strategyId, state, targets);
-
-            let lockedCount = state.filter(s => s.locked).length;
-            if (lockedCount > 2) break;
-
-            if (lockedCount > currentLocks) {
-                for (let i = currentLocks + 1; i <= lockedCount; i++) {
-                    stonesUsed += (i + 1);
-                }
-                currentLocks = lockedCount;
-            }
-
-            stonesUsed += 1 + lockedCount;
-            let usedTypes = state.filter(s => s.locked && s.type !== "空詞條").map(s => s.type);
-
-            for (let i = 0; i < 3; i++) {
-                if (!state[i].locked) {
-                    if (Math.random() < SLOT_PROBS[i]) {
-                        let newType = getRandomType(usedTypes);
-                        usedTypes.push(newType);
-                        state[i] = { type: newType, tier: rollTier(), locked: false };
-                    } else {
-                        state[i] = { type: '空詞條', tier: 0, locked: false };
-                    }
-                }
-            }
-        }
-
-        // === Phase 2: Value Reroll - reach target TIER ===
-        if (needTierCheck && checkTypesReady(state, targets) && !checkFullGraduated(state, targets)) {
-            // Unlock all slots for Phase 2
-            for (let i = 0; i < 3; i++) state[i].locked = false;
-
-            while (!checkFullGraduated(state, targets) && stonesUsed < 10000) {
-                // Lock slots that already meet tier target
-                for (let i = 0; i < 3; i++) {
-                    if (!state[i].locked && isValidTypeTier(state[i].type, state[i].tier, targets)) {
-                        state[i].locked = true;
-                    }
-                }
-
-                let lockedCount = state.filter(s => s.locked).length;
-                if (lockedCount > 2) break;
-                if (checkFullGraduated(state, targets)) break;
-
-                stonesUsed += 1 + lockedCount;
-
-                // Value reroll: only change TIER, keep TYPE
-                for (let i = 0; i < 3; i++) {
-                    if (!state[i].locked && isValidType(state[i].type, targets)) {
-                        state[i].tier = rollTier();
-                    }
-                }
-            }
-        }
-
-        if (stonesUsed < 10000 && checkFullGraduated(state, targets)) {
-            totalStones += stonesUsed;
-            successCount++;
-        }
-    }
-
-    if (successCount === 0) return null;
-    return (totalStones / successCount).toFixed(1);
-}
-
-function runSimulation() {
-    let targets = [];
-    for (let i = 0; i < 6; i++) {
-        let type = document.getElementById(`calc_tgt_type_${i}`).value;
-        let tier = parseInt(document.getElementById(`calc_tgt_tier_${i}`).value);
-        if (type !== "空詞條") targets.push({ type, tier });
-    }
-
-    let resultCard = document.getElementById('calcResultCard');
-    let resultList = document.getElementById('calcResultList');
-
-    if (targets.length === 0) {
-        resultCard.style.display = 'block';
-        resultList.innerHTML = '<div style="text-align:center; color:#FF3333; font-weight:bold;">請至少設定一個目標詞條</div>';
-        return;
-    }
-
-    let initialState = [];
-    for (let i = 0; i < 3; i++) {
-        let type = document.getElementById(`calc_cur_type_${i}`).value;
-        let tier = parseInt(document.getElementById(`calc_cur_tier_${i}`).value);
-        let locked = document.getElementById(`calc_cur_lock_${i}`).checked;
-        initialState.push({ type: type, tier: type === "空詞條" ? 0 : tier, locked: locked });
-    }
-
-    let simCount = parseInt(document.getElementById('calcSimCount').value);
-
-    resultCard.style.display = 'block';
-    resultList.innerHTML = '<div style="text-align:center; color:#5E5545; font-weight:bold;">計算中...</div>';
-
-    setTimeout(() => {
-        let results = [];
-        for (let sid = 0; sid < 5; sid++) {
-            let avg = runOneStrategy(sid, initialState, targets, simCount);
-            results.push({ name: STRATEGY_NAMES[sid], avg: avg });
-        }
-
-        // Sort by avg stones (lowest first), nulls last
-        results.sort((a, b) => {
-            if (a.avg === null) return 1;
-            if (b.avg === null) return -1;
-            return parseFloat(a.avg) - parseFloat(b.avg);
-        });
-
-        let html = '';
-        results.forEach((r, idx) => {
-            let bgColor = idx === 0 ? '#d4edda' : '#F7F4EB';
-            let textColor = idx === 0 ? '#155724' : '#5E5545';
-            let badge = idx === 0 ? ' (最省)' : '';
-            let avgText = r.avg !== null ? `${r.avg} 顆石頭` : '無法畢業';
-            let avgColor = r.avg !== null ? '#1CB0F6' : '#FF3333';
-
-            html += `<div style="background:${bgColor}; padding:10px; margin-bottom:8px; border-radius:6px;">
-                <div style="font-size:13px; color:${textColor}; font-weight:bold; margin-bottom:4px;">${idx + 1}. ${r.name}${badge}</div>
-                <div style="font-size:16px; color:${avgColor}; font-weight:bold;">${avgText}</div>
             </div>`;
-        });
-
-        resultList.innerHTML = html;
-    }, 50);
+        }).join("");
+        const actions = g.awakened
+            ? `<button class="btn solid" data-act="effect" data-g="${gi}" ${n > 2 ? "disabled" : ""}>效果變更<small>${rollCost} 顆</small></button>
+               <button class="btn solid alt" data-act="value" data-g="${gi}" ${canValue ? "" : "disabled"}>數值變更<small>${rollCost} 顆</small></button>`
+            : `<button class="btn solid" data-act="awaken" data-g="${gi}">開光<small>1 顆</small></button>`;
+        return `<article class="plate">
+            <header><h2>${g.name}</h2><button class="link" data-act="reset" data-g="${gi}">重置這件</button></header>
+            ${lines}
+            <div class="plate-actions">${actions}</div>
+        </article>`;
+    }).join("");
+    renderLedger();
+    save();
 }
 
-window.onload = () => {
-    initReference();
-    buildCalculatorUI();
-    renderUI();
-    updateTopBar();
+function doAwaken(g) {
+    if (!afford(1, 0)) return;
+    spend(1, 0);
+    g.awakened = true;
+    g.lines = E.rollEffect(g.lines, [false, false, false], false).map(l => l.t === EMPTY ? l : { t: l.t, k: 11 });
+    render();
+}
+
+function toggleLock(g, i, kind) {
+    const arr = g[kind];
+    if (arr[i]) { arr[i] = false; render(); return; }
+    const base = lockCount(g) === 0 ? 2 : 3;
+    const stones = kind === "stone" ? base : 0, keys = kind === "key" ? base * 10 : 0;
+    if (!afford(stones, keys)) return;
+    spend(stones, keys);
+    arr[i] = true;
+    toast(kind === "stone" ? `已鎖定，花了 ${stones} 顆石頭` : `已鎖定，花了 ${keys} 把鑰匙`);
+    render();
+}
+
+let pending = null;
+function doRoll(g, mode) {
+    const locked = lockedOf(g);
+    const cost = 1 + locked.filter(Boolean).length;
+    if (!afford(cost, 0)) return;
+    spend(cost, 0);
+    const roll = mode === "effect" ? E.rollEffect : E.rollValue;
+    const mass = mode === "effect" ? E.massEffect : E.massValue;
+    const next = roll(g.lines, locked, true);
+    const mo = mass(g.lines, locked), mn = mass(next, locked);
+
+    $("rollTitle").textContent = mode === "effect" ? "效果變更" : "數值變更";
+    $("rollOld").innerHTML = g.lines.map((l, i) => lineHTML(l, locked[i] ? "is-locked" : "")).join("");
+    $("rollNew").innerHTML = next.map((l, i) => {
+        const o = g.lines[i];
+        return lineHTML(l, locked[i] ? "is-locked" : (o.t !== l.t || o.k !== l.k) ? "changed" : "");
+    }).join("");
+    const boost = m => m <= 0 ? "留這組：下次機率不變" : `留這組：下次其他結果機率 +${(m / (1 - m) * 100).toFixed(m > 0.01 ? 1 : 2)}%`;
+    $("massOld").textContent = boost(mo);
+    $("massNew").textContent = boost(mn);
+    $("rollTip").textContent = Math.max(mo, mn) < 0.01
+        ? "遊戲不會再洗出你留著的那組，它原本的機率會分給其他結果。這次兩邊都不到 1%，留哪邊幾乎沒差。"
+        : mo === mn ? "遊戲不會再洗出你留著的那組，它原本的機率會分給其他結果。兩邊加成一樣。"
+            : `遊戲不會再洗出你留著的那組，它原本的機率會分給其他結果。兩邊都不要的話，選「${mo > mn ? "效果維持" : "效果變更"}」加成比較多。`;
+    pending = { g, next };
+    renderLedger();
+    $("rollDialog").showModal();
+}
+function resolveRoll(take) {
+    if (!pending) return;
+    if (take) pending.g.lines = pending.next;
+    pending.g.key = [false, false, false]; // 鑰匙鎖只管一次
+    pending = null;
+    $("rollDialog").close();
+    render();
+}
+
+$("gear").addEventListener("click", e => {
+    const b = e.target.closest("[data-act]");
+    if (!b || b.disabled) return;
+    const g = state.gear[+b.dataset.g], i = +b.dataset.i;
+    switch (b.dataset.act) {
+        case "awaken": doAwaken(g); break;
+        case "reset": state.gear[+b.dataset.g] = blankGear(g.name); render(); break;
+        case "stone": toggleLock(g, i, "stone"); break;
+        case "key": toggleLock(g, i, "key"); break;
+        case "effect": doRoll(g, "effect"); break;
+        case "value": doRoll(g, "value"); break;
+    }
+});
+$("btnKeep").onclick = () => resolveRoll(false);
+$("btnTake").onclick = () => resolveRoll(true);
+$("rollDialog").addEventListener("cancel", e => { e.preventDefault(); resolveRoll(false); });
+$("inputStones").addEventListener("input", () => { renderLedger(); save(); });
+$("inputKeys").addEventListener("input", () => { renderLedger(); save(); });
+
+let resetArmed = 0;
+$("btnResetAll").onclick = () => {
+    if (Date.now() - resetArmed > 3000) { resetArmed = Date.now(); toast("再按一次就清空所有裝備和花費"); return; }
+    resetArmed = 0;
+    state = { stones: 0, keys: 0, gear: SLOTS.map(blankGear) };
+    $("inputStones").value = ""; $("inputKeys").value = "";
+    render();
+    toast("已全部重置");
 };
 
+// ---------- 詞條總和 ----------
+const VERDICTS = [
+    [110, "共鬥天帝", "詞條掛發我，求求了"],
+    [95, "個突皇帝", "我命令你馬上上號帶我前百"],
+    [80, "凱瑞大C", "共鬥亮出戰力，其他人都要自覺跪下"],
+    [60, "也就那樣", "下次會戰前記得提升不然優化你"],
+    [40, "你洗了嗎", "不會吧你還有錢吧去買石頭阿"],
+    [20, "路邊一條", "記得把輔助技能拉滿，自覺一點"],
+    [-1, ":)", ":)"]
+];
+const SCORE_W = { "優越代碼傷害": 0.6, "攻擊力": 0.8, "最大彈藥數": 0.05, "蓄力速度": 0.8, "暴擊傷害": 0.2, "暴擊率": 0.6, "蓄力傷害": 0.1 };
+
+$("btnSummary").onclick = () => {
+    const sums = {};
+    state.gear.forEach(g => g.lines.forEach(l => {
+        if (l.t !== EMPTY) sums[TYPES[l.t]] = (sums[TYPES[l.t]] || 0) + STAT_TIERS[TYPES[l.t]][l.k - 1];
+    }));
+    let score = 0;
+    for (const t in sums) score += sums[t] * (SCORE_W[t] || 0);
+    const v = VERDICTS.find(x => score >= x[0]);
+    $("scoreTitle").textContent = v[1];
+    $("scoreQuote").textContent = v[2];
+    const rows = TYPES.filter(t => sums[t]).map(t => `<div class="sum-row"><span>${t}</span><b>+${sums[t].toFixed(2)}%</b></div>`).join("");
+    $("sumList").innerHTML = rows || `<p class="hint">還沒有任何詞條，先幫裝備開光。</p>`;
+    $("sumCost").textContent = `這輪總共花了 ${state.stones} 顆石頭、${state.keys} 把鑰匙。`;
+    $("sumDialog").showModal();
+};
+$("btnSumClose").onclick = () => $("sumDialog").close();
+
+// ---------- 分頁 ----------
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+    document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
+    document.querySelectorAll(".tab").forEach(s => s.classList.toggle("active", s.id === "tab-" + b.dataset.tab));
+    window.scrollTo(0, 0);
+});
+
+// ---------- 階級表 ----------
+function buildRef() {
+    let h = `<thead><tr><th>階級</th><th>機率</th>${TYPES.map(t => `<th>${t}</th>`).join("")}</tr></thead><tbody>`;
+    for (let k = 15; k >= 1; k--) {
+        h += `<tr class="${tierClass(k)}"><th>${k}</th><td>${(E.TIER_P[k] * 100).toFixed(0)}%</td>${TYPES.map(t => `<td>${STAT_TIERS[t][k - 1].toFixed(2)}</td>`).join("")}</tr>`;
+    }
+    h += `</tbody><tfoot><tr><th>種類</th><td></td>${E.WEIGHTS.map(w => `<td>${(w * 100).toFixed(0)}%</td>`).join("")}</tr></tfoot>`;
+    $("refTable").innerHTML = h;
+}
+
+// ---------- 期望計算 ----------
+const tierOpts = sel => { let s = ""; for (let k = 1; k <= 15; k++) s += `<option ${k === sel ? "selected" : ""}>${k}</option>`; return s; };
+function buildCalc() {
+    const typeOpts = `<option value="-1">空詞條</option>` + TYPES.map((t, i) => `<option value="${i}">${t}</option>`).join("");
+    $("calcCurrent").innerHTML = [0, 1, 2].map(i => `<div class="row">
+        <span class="slot-no">${i + 1}</span>
+        <select id="cType${i}" aria-label="${i + 1} 號位種類">${typeOpts}</select>
+        <select id="cTier${i}" aria-label="${i + 1} 號位階級">${tierOpts(11)}</select><span>階</span>
+        <label class="check"><input type="checkbox" id="cLock${i}"> 已鎖</label>
+    </div>`).join("");
+    $("calcTargets").innerHTML = TYPES.map((t, i) => `<div class="target">
+        <label class="check"><input type="checkbox" id="tOn${i}"> ${t}</label>
+        <select id="tTier${i}" aria-label="${t} 最低階級">${tierOpts(11)}</select><span>階以上</span>
+    </div>`).join("");
+    setPreset([0, 3]);
+}
+function setPreset(ids) {
+    TYPES.forEach((_, i) => { $("tOn" + i).checked = ids.includes(i); });
+    $("calcNeed").value = String(ids.length);
+}
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => setPreset(b.dataset.preset.split(",").map(Number)));
+
+function runCalc() {
+    const out = $("calcResult");
+    const targets = TYPES.map((_, i) => $("tOn" + i).checked ? +$("tTier" + i).value : 0);
+    const nT = targets.filter(Boolean).length;
+    const need = +$("calcNeed").value;
+    const init = [0, 1, 2].map(i => {
+        const t = +$("cType" + i).value;
+        return { t, k: t === EMPTY ? 0 : +$("cTier" + i).value, locked: $("cLock" + i).checked };
+    });
+    const used = init.filter(l => l.t !== EMPTY).map(l => l.t);
+    if (!nT) { out.innerHTML = `<p class="error">請至少勾選一種想要的詞條。</p>`; return; }
+    if (need > nT) { out.innerHTML = `<p class="error">想要的種類只有 ${nT} 種，湊不到 ${need} 條。多勾幾種，或把條數調低。</p>`; return; }
+    if (new Set(used).size !== used.length) { out.innerHTML = `<p class="error">現在的詞條有重複種類，同一件裝備不會出現兩條一樣的。</p>`; return; }
+
+    const runs = +$("calcRuns").value;
+    const jobs = [];
+    for (let s = 0; s < 5; s++) for (let k = 0; k < 2; k++) jobs.push({ strategy: s, keepHigh: !!k });
+    const results = [];
+    $("btnCalc").disabled = true;
+    const step = () => {
+        const j = jobs[results.length];
+        results.push({ ...j, ...E.simulate({ ...j, init, targets, need, runs, exclude: true }) });
+        out.innerHTML = `<p class="hint">計算中 ${results.length} / ${jobs.length}</p>`;
+        if (results.length < jobs.length) return setTimeout(step, 0);
+        results.sort((a, b) => (a.avg === null) - (b.avg === null) || a.avg - b.avg);
+        const best = results[0];
+        const old = best.avg === null ? null : E.simulate({ strategy: best.strategy, keepHigh: false, init, targets, need, runs, exclude: false });
+        showResults(results, old);
+        $("btnCalc").disabled = false;
+    };
+    out.innerHTML = `<p class="hint">計算中 0 / ${jobs.length}</p>`;
+    setTimeout(step, 30);
+}
+
+function showResults(results, old) {
+    const max = Math.max(...results.map(r => r.avg || 0));
+    if (results[0].avg === null) { $("calcResult").innerHTML = `<p class="error">每種策略都在 10,000 顆內洗不到，目標可能太高。</p>`; return; }
+    let h = `<ol class="rank">`;
+    results.forEach((r, i) => {
+        h += `<li class="${i === 0 ? "best" : ""}">
+            <div class="rank-name">${E.LOCK_STRATEGIES[r.strategy]}<span class="tag ${r.keepHigh ? "hi" : ""}">${E.KEEP_POLICIES[+r.keepHigh]}</span></div>
+            ${r.avg === null ? `<div class="rank-num">洗不到</div>` : `
+            <div class="bar"><i style="width:${(r.avg / max * 100).toFixed(1)}%"></i></div>
+            <div class="rank-num"><b>${r.avg.toFixed(1)}</b> 顆<small>中位數 ${r.median}，九成的人在 ${r.p90} 顆內</small></div>`}
+        </li>`;
+    });
+    h += `</ol>`;
+    if (old && old.avg !== null) {
+        const d = old.avg - results[0].avg;
+        h += `<p class="hint">同樣的鎖法在舊機制平均要 ${old.avg.toFixed(1)} 顆，新機制${d >= 0 ? "省" : "多"} ${Math.abs(d).toFixed(1)} 顆。差距小於 1～2 顆時屬於模擬誤差。</p>`;
+    }
+    $("calcResult").innerHTML = h;
+}
+$("btnCalc").onclick = runCalc;
+
+load();
+buildRef();
+buildCalc();
+render();
