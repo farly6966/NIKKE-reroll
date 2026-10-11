@@ -60,6 +60,8 @@ function afford(stones, keys) {
 function spend(stones, keys) { state.stones += stones; state.keys += keys; }
 const lockedOf = g => g.lines.map((_, i) => g.stone[i] || g.key[i]);
 const lockCount = g => lockedOf(g).filter(Boolean).length;
+// 鑰匙鎖每洗一次扣一次：是唯一的鎖扣 20，另有一條鎖扣 30，兩條都是鑰匙鎖扣 50
+const keyCost = g => { const m = g.key.filter(Boolean).length; return m === 0 ? 0 : m === 2 ? 50 : lockCount(g) === 2 ? 30 : 20; };
 
 // ---------- 模擬畫面 ----------
 function renderLedger() {
@@ -73,7 +75,8 @@ function renderLedger() {
 function render() {
     $("gear").innerHTML = state.gear.map((g, gi) => {
         const n = lockCount(g);
-        const rollCost = 1 + n;
+        const kc = keyCost(g);
+        const rollCost = `${1 + n} 顆` + (kc ? ` + ${kc} 鑰匙` : "");
         const canValue = g.lines.some((l, i) => l.t !== EMPTY && !(g.stone[i] || g.key[i]));
         const lines = g.lines.map((l, i) => {
             const isLocked = g.stone[i] || g.key[i];
@@ -87,13 +90,13 @@ function render() {
                     <button class="lock stone ${g.stone[i] ? "on" : ""}" data-act="stone" data-g="${gi}" data-i="${i}"
                         ${(dis && !g.stone[i]) || g.key[i] ? "disabled" : ""} aria-pressed="${g.stone[i]}">${g.stone[i] ? "石頭鎖中" : `石頭鎖 ${cost}`}</button>
                     <button class="lock key ${g.key[i] ? "on" : ""}" data-act="key" data-g="${gi}" data-i="${i}"
-                        ${(dis && !g.key[i]) || g.stone[i] ? "disabled" : ""} aria-pressed="${g.key[i]}">${g.key[i] ? "鑰匙鎖中" : `鑰匙鎖 ${cost * 10}`}</button>
+                        ${(dis && !g.key[i]) || g.stone[i] ? "disabled" : ""} aria-pressed="${g.key[i]}">${g.key[i] ? "鑰匙鎖中" : `鑰匙鎖 ${cost * 10}/次`}</button>
                 </div>
             </div>`;
         }).join("");
         const actions = g.awakened
-            ? `<button class="btn solid" data-act="effect" data-g="${gi}" ${n > 2 ? "disabled" : ""}>效果變更<small>${rollCost} 顆</small></button>
-               <button class="btn solid alt" data-act="value" data-g="${gi}" ${canValue ? "" : "disabled"}>數值變更<small>${rollCost} 顆</small></button>`
+            ? `<button class="btn solid" data-act="effect" data-g="${gi}" ${n > 2 ? "disabled" : ""}>效果變更<small>${rollCost}</small></button>
+               <button class="btn solid alt" data-act="value" data-g="${gi}" ${canValue ? "" : "disabled"}>數值變更<small>${rollCost}</small></button>`
             : `<button class="btn solid" data-act="awaken" data-g="${gi}">開光<small>1 顆</small></button>`;
         return `<article class="plate">
             <header><h2>${g.name}</h2><button class="link" data-act="reset" data-g="${gi}">重置這件</button></header>
@@ -117,11 +120,12 @@ function toggleLock(g, i, kind) {
     const arr = g[kind];
     if (arr[i]) { arr[i] = false; render(); return; }
     const base = lockCount(g) === 0 ? 2 : 3;
-    const stones = kind === "stone" ? base : 0, keys = kind === "key" ? base * 10 : 0;
-    if (!afford(stones, keys)) return;
-    spend(stones, keys);
+    if (kind === "stone") {
+        if (!afford(base, 0)) return;
+        spend(base, 0);
+    }
     arr[i] = true;
-    toast(kind === "stone" ? `已鎖定，花了 ${stones} 顆石頭` : `已鎖定，花了 ${keys} 把鑰匙`);
+    toast(kind === "stone" ? `已鎖定，花了 ${base} 顆石頭` : `已鎖定，之後每洗一次扣 ${base * 10} 把鑰匙`);
     render();
 }
 
@@ -129,8 +133,9 @@ let pending = null;
 function doRoll(g, mode) {
     const locked = lockedOf(g);
     const cost = 1 + locked.filter(Boolean).length;
-    if (!afford(cost, 0)) return;
-    spend(cost, 0);
+    const keys = keyCost(g);
+    if (!afford(cost, keys)) return;
+    spend(cost, keys);
     const roll = mode === "effect" ? E.rollEffect : E.rollValue;
     const mass = mode === "effect" ? E.massEffect : E.massValue;
     const next = roll(g.lines, locked, true);
@@ -156,7 +161,6 @@ function doRoll(g, mode) {
 function resolveRoll(take) {
     if (!pending) return;
     if (take) pending.g.lines = pending.next;
-    pending.g.key = [false, false, false]; // 鑰匙鎖只管一次
     pending = null;
     $("rollDialog").close();
     render();
